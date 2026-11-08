@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>기발해 콘텐츠</title>
+<meta name="theme-color" content="#0e0f11">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="{{ url_for('gibalhae.static', filename='gibalhae.css') }}">
+</head>
+<body class="gb">
+
+<header class="adm-top">
+  <a class="adm-back" href="{{ home_url }}">← {{ home_label }}</a>
+  <h1>기발해 콘텐츠</h1>
+  <span class="adm-note" id="gb-credits"></span>
+  <button class="adm-btn" id="gb-reload" type="button">새로고침</button>
+</header>
+
+<nav class="adm-tabs" role="tablist">
+  <button class="adm-tab active" type="button" role="tab" data-tab="content">콘텐츠</button>
+  <button class="adm-tab" type="button" role="tab" data-tab="keys">연결<span class="adm-badge" id="gb-keys-badge" hidden></span></button>
+  <button class="adm-tab" type="button" role="tab" data-tab="jobs">작업<span class="adm-badge" id="gb-jobs-badge" hidden></span></button>
+  <span class="adm-me">{{ username }} · 관리자
+    {% if logout_url %}<form method="post" action="{{ logout_url }}"><button type="submit">로그아웃</button></form>{% endif %}</span>
+</nav>
+
+<main class="adm-main" id="tab-content">
+  <section class="adm-sec">
+    <div class="adm-sec-head">
+      <h2>날짜별 상태</h2>
+      <span class="adm-note">초안은 아침 예약 작업(클로드)이 만들고, 여기서 승인 → 제작 → 올리기</span>
+      <span class="gb-grow"></span>
+      <select id="gb-topic" class="gb-select" aria-label="소재"></select>
+      <button class="adm-btn sm" id="gb-new" type="button">새 날짜 만들기</button>
+    </div>
+    <div class="gb-flow adm-note">draft(초안) → approved(승인) → built(영상 완성) → published(올림) · rejected(반려)</div>
+    <div id="gb-days"><div class="adm-note">불러오는 중…</div></div>
+  </section>
+  <section class="adm-sec" id="gb-detail" hidden></section>
+</main>
+
+<main class="adm-main" id="tab-keys" hidden>
+  <section class="adm-sec">
+    <div class="adm-sec-head"><h2>연결 — API 키</h2>
+      <span class="adm-note">값은 <code id="gb-keys-file"></code> 에만 저장되고 화면·로그에는 끝 4자리만 보입니다. 저장 뒤 「확인」을 누르면 실제로 불러 봅니다.</span></div>
+    <div id="gb-keys"><div class="adm-note">불러오는 중…</div></div>
+  </section>
+</main>
+
+<main class="adm-main" id="tab-jobs" hidden>
+  <section class="adm-sec">
+    <div class="adm-sec-head"><h2>작업 기록</h2><span class="adm-note">제작·올리기 등은 따로 돌고, 기록은 2초마다 갱신됩니다</span></div>
+    <div id="gb-jobs"><div class="adm-note">아직 없음</div></div>
+  </section>
+</main>
+
+<div class="adm-toast" id="adm-toast" hidden></div>
+<script nonce="{{ csp_nonce|default('') }}" src="{{ url_for('gibalhae.static', filename='gibalhae.js') }}"></script>
+</body>
+</html>

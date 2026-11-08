@@ -1,4 +1,36 @@
-/* 기발해 콘텐츠 관리 — admin.css 위에 얹는다 */
+/* 기발해 콘텐츠 관리 — 자립형(건우아비 app.css·admin.css 없이도 그대로 보인다). 호스트 앱에 같은 변수가 있으면 그 값이 이긴다 */
+:root{--bg:#0e0f11;--cell:#18191c;--cell2:#202226;--chip:#2a2c31;--line:#26282c;--line2:#34373c;--fg:#f1f2f4;--fg2:#d0d3d8;--mut:#9ba0a8;
+  --up:#ff5c5c;--down:#5aa2ff;--acc:#ffd43b;--warn:#ffad42;--ok:#38d39f;--pad:16px;--padx:max(var(--pad),calc((100% - 1100px) / 2))}
+html{color-scheme:dark}
+body.gb{margin:0;padding:0 0 48px;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;-webkit-font-smoothing:antialiased}
+.gb button,.gb input,.gb select,.gb textarea{font:inherit;color:inherit}
+.gb a{color:var(--fg2)}
+.gb .adm-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px var(--padx);background:var(--bg);border-bottom:1px solid var(--line)}
+.gb .adm-top h1{margin:0;font-size:17px;font-weight:700;white-space:nowrap}
+.gb .adm-back{color:var(--mut);text-decoration:none;font-size:13px;white-space:nowrap}
+.gb .adm-btn{height:30px;padding:0 12px;border:0;border-radius:6px;background:var(--chip);color:var(--fg);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.gb .adm-btn:hover{background:var(--line2)}
+.gb .adm-btn:disabled{opacity:.5;cursor:default}
+.gb .adm-btn.sm{height:26px;padding:0 9px;font-size:12px}
+.gb .adm-btn.danger{color:var(--up)}
+.gb .adm-tabs{display:flex;align-items:center;gap:20px;padding:0 var(--padx);border-bottom:1px solid var(--line)}
+.gb .adm-tab{padding:12px 2px 9px;border:0;border-bottom:2px solid transparent;background:none;color:var(--mut);font-size:14.5px;font-weight:600;cursor:pointer}
+.gb .adm-tab.active{color:var(--fg);border-bottom-color:var(--acc)}
+.gb .adm-badge{display:inline-block;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:var(--warn);color:#111;font-size:11px;font-weight:700;line-height:18px;text-align:center;vertical-align:1px}
+.gb .adm-me{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--mut);font-size:12.5px}
+.gb .adm-me button{height:26px;padding:0 9px;border:0;border-radius:6px;background:var(--chip);color:var(--fg);font-size:12px;cursor:pointer}
+.gb .adm-main{padding:0 var(--padx)}
+.gb .adm-sec{margin:18px 0 26px;scroll-margin-top:64px}
+.gb .adm-sec-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.gb .adm-sec h2{margin:0;font-size:15px;font-weight:700}
+.gb .adm-note{color:var(--mut);font-size:12px;font-weight:400}
+.gb .adm-note.err,.gb .err{color:var(--warn);font-size:11.5px;overflow-wrap:anywhere}
+.gb .adm-toast{position:fixed;left:50%;bottom:16px;z-index:50;transform:translateX(-50%);max-width:min(560px,calc(100vw - 24px));padding:10px 14px;border-radius:8px;background:var(--cell2);box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:13px}
+.gb .adm-toast.ok{border-left:3px solid var(--ok)}
+.gb .adm-toast.warn{border-left:3px solid var(--warn)}
+.gb code{font-size:12px;color:var(--fg2)}
+@media (max-width:640px){.gb .adm-main{padding:0 10px}.gb .adm-tabs{gap:14px;overflow-x:auto}}
+
 .gb .gb-grow{flex:1}
 .gb-select{height:30px;max-width:min(60vw,420px);border:1px solid var(--line2);border-radius:6px;background:var(--cell);color:var(--fg);font-size:12.5px;padding:0 6px}
 .gb-flow{margin:-2px 0 10px}

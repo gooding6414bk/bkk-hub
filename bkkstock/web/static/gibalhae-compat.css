@@ -10,18 +10,20 @@
   --ok: var(--good); --warn: var(--warn); --up: var(--block);
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 16px 16px;
 }
-.gb .adm-top { display: flex; align-items: center; gap: 12px; padding: 14px 0 10px; flex-wrap: wrap; }
+/* 기발해 CSS는 머리줄을 화면 위에 고정한다. 통합 보드에서는 보드 메뉴가 위에 있으니 고정을 푼다 */
+.gb .adm-top { position: static; display: flex; align-items: center; gap: 12px; padding: 14px 0 10px; flex-wrap: wrap; background: transparent; border-bottom: 0; }
 .gb .adm-top h1 { margin: 0; font-size: 1.15rem; }
 .gb .adm-btn { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--chip); color: var(--fg); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
 .gb .adm-btn:hover { filter: brightness(.97); }
 .gb .adm-btn:disabled { opacity: .5; cursor: default; }
 .gb .adm-btn.sm { height: 28px; padding: 0 10px; font-size: .8rem; }
 .gb .adm-btn.danger { color: var(--block); }
-.gb .adm-tabs { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.gb .adm-tabs { display: flex; align-items: center; gap: 20px; padding: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
 .gb .adm-tab { padding: 10px 2px 8px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; border-radius: 0; }
 .gb .adm-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
 .gb .adm-badge { display: inline-block; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 5px; border-radius: 9px; background: var(--warn-bg); color: var(--warn); font-size: 11px; line-height: 18px; text-align: center; }
 .gb .adm-main { padding: 0; }
+.gb a { color: var(--accent); }
 .gb .adm-sec { margin: 16px 0 8px; }
 .gb .adm-sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .gb .adm-sec h2 { margin: 0; font-size: 1rem; }

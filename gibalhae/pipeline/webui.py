@@ -1,7 +1,14 @@
-"""콘텐츠 제작 관리 대시보드 — 통합 보드(bkkstock/web/app.py)에 붙는 Flask 블루프린트. 로그인한 주인만.
+"""콘텐츠 제작 관리 대시보드 — 보드 앱(app.py)에 붙는 Flask 블루프린트. 관리자만.
 
 화면 /gibalhae — 탭 3개: 콘텐츠(날짜별 상태·승인·제작·업로드·미리보기·글 고치기) · 연결(API 키 넣기·확인) · 작업(실행 기록).
 API  /api/gibalhae/*
+
+어느 Flask 앱에나 붙는다: app.register_blueprint(bp). 템플릿·정적 파일은 이 폴더의 ui/ 에 있다.
+호스트가 정할 수 있는 것(app.config):
+    GIBALHAE_HOME_URL   "← 보드" 링크 (기본 "/")      GIBALHAE_HOME_LABEL  (기본 "보드")
+    GIBALHAE_LOGOUT_URL 로그아웃 폼 주소 (기본 "/logout", "" 이면 숨김)
+    GIBALHAE_ALLOW      함수 () -> bool. 관리자만 통과시키는 검사. 없으면 g.user 의 role 이 admin 인지 보고, g.user 도 없으면 통과(호스트가 이미 막았다고 본다)
+혼자 띄우려면 gibalhae/app.py (비밀번호 하나짜리 로그인).
 작업(제작·업로드 등)은 daily.py 를 별도 프로세스로 돌리고 기록을 instance/gibalhae/jobs/ 에 남긴다 — 화면이 2초마다 읽는다.
 """
 from __future__ import annotations
@@ -15,14 +22,15 @@ import threading
 import time
 import uuid
 
-from flask import Blueprint, abort, g, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, abort, current_app, g, jsonify, render_template, request, send_from_directory
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pipeline import common as C  # noqa: E402
 from pipeline import keys  # noqa: E402
 from pipeline.check import check_file  # noqa: E402
 
-bp = Blueprint("gibalhae", __name__)
+UI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
+bp = Blueprint("gibalhae", __name__, template_folder=UI, static_folder=os.path.join(UI, "static"), static_url_path="/gibalhae/static")
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DAILY = os.path.join(REPO, "gibalhae", "pipeline", "daily.py")
 JOBS_DIR = os.path.join(keys.INSTANCE, "gibalhae", "jobs")
@@ -36,10 +44,36 @@ def _date_ok(d: str) -> bool:
     return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""))
 
 
+def _username() -> str:
+    u = getattr(g, "user", None)
+    if isinstance(u, dict):
+        return str(u.get("username") or u.get("name") or "admin")
+    return str(u or "admin")
+
+
+@bp.before_request
+def _admin_only():
+    if request.endpoint == "gibalhae.static":
+        return None
+    allow = current_app.config.get("GIBALHAE_ALLOW")
+    if callable(allow):
+        ok = bool(allow())
+    else:
+        u = getattr(g, "user", None)
+        ok = True if u is None else (isinstance(u, dict) and u.get("role") in (None, "admin"))
+    if not ok:
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "관리자만 쓸 수 있습니다"}), 403
+        abort(403)
+    return None
+
+
 # ------------------------------------------------------------------ 화면 --
 @bp.get("/gibalhae")
 def page():
-    return render_template("gibalhae.html", user=g.user)
+    cfg = current_app.config
+    return render_template("gibalhae.html", username=_username(), home_url=cfg.get("GIBALHAE_HOME_URL", "/"),
+                           home_label=cfg.get("GIBALHAE_HOME_LABEL", "보드"), logout_url=cfg.get("GIBALHAE_LOGOUT_URL", "/logout"))
 
 
 # ------------------------------------------------------------------ 콘텐츠 --
@@ -213,7 +247,7 @@ def action():
             return jsonify({"error": "같은 작업이 돌고 있습니다"}), 409
     argv = [sys.executable, "-B", DAILY, cmd] + ([date] if cmd != "new" else []) + args
     job = {"id": uuid.uuid4().hex[:10], "name": cmd, "date": date, "args": args, "cmd": argv, "status": "running",
-           "started": time.time(), "ended": None, "rc": None, "by": g.user["username"]}
+           "started": time.time(), "ended": None, "rc": None, "by": _username()}
     with _lock:
         _jobs[job["id"]] = job
         for old in sorted(_jobs.values(), key=lambda j: j["started"])[:-40]:

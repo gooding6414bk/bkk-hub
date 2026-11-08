@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf" content="{{ csrf }}">
 <title>{% block title %}보드{% endblock %} · bkk hub</title>
+{% block head_before %}{% endblock %}
 <link rel="stylesheet" href="/static/app.css?v={{ version }}">
 {% block head %}{% endblock %}
 </head>

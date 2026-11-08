@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}기발해 콘텐츠{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/gibalhae-compat.css?v={{ version }}"><link rel="stylesheet" href="/static/gibalhae.css?v={{ version }}">{% endblock %}
+{# 기발해 CSS(독립형, :root를 어두운 색으로 정함)를 보드 CSS보다 먼저 불러 보드 색이 이기게 한다 #}
+{% block head_before %}<link rel="stylesheet" href="{{ url_for('gibalhae.static', filename='gibalhae.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/gibalhae-compat.css?v={{ version }}">{% endblock %}
 {% block content %}
 <div class="adm gb">
 <header class="adm-top">
@@ -49,6 +51,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>window.GB_USER = {{ user.username|tojson }};</script>
-<script src="/static/gibalhae.js?v={{ version }}"></script>
+<script>window.GB_USER = {{ (username or (user.username if user else "주인"))|tojson }};</script>
+<script src="{{ url_for('gibalhae.static', filename='gibalhae.js') }}?v={{ version }}"></script>
 {% endblock %}
