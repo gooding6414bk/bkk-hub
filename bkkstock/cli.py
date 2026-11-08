@@ -44,7 +44,8 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("web")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8020)
-    sub.add_parser("gibalhae-sync")
+    p = sub.add_parser("gibalhae-sync")
+    p.add_argument("--src", help="초안 폴더 (기본: 저장소의 gibalhae/content)")
     p = sub.add_parser("demo-seed")
     p.add_argument("--days", type=int, default=70)
     args = ap.parse_args(argv)
@@ -60,8 +61,9 @@ def main(argv: list[str] | None = None) -> None:
         serve(app, host=args.host, port=args.port, threads=8, ident="bkk-hub")
         return
     if args.cmd == "gibalhae-sync":
-        from .gibalhae_sync import sync, target_dir
-        copied = sync()
+        from pathlib import Path
+        from .gibalhae_sync import REPO_CONTENT, sync, target_dir
+        copied = sync(Path(args.src) if args.src else REPO_CONTENT)
         print(f"{len(copied)}개 파일 → {target_dir()}")
         return
     if args.cmd == "demo-seed":

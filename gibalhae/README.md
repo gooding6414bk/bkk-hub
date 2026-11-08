@@ -17,7 +17,7 @@ check.py                                           publisher 가 주소 기록·
 ## 대시보드 (통합 보드 bkk hub → 🎬 기발해)
 
 통합 보드(이 저장소, Ubuntu-1 서버 포트 8020) 상단 **🎬 기발해** 를 누르면 `/gibalhae` 콘텐츠 관리로 간다. 원래 건우아비 보드 안에 있던 것을 주식 보드와 합쳐 따로 뺐다(2026-11-08). 대시보드 첫 화면에도 할 일 카드가 뜬다.
-서버에서는 콘텐츠를 git 밖 `instance/gibalhae/content/` 에 두고(`GIBALHAE_CONTENT`), 저장소에 새로 올라온 초안만 자동 업데이트 때 복사해 온다. 그래서 서버에서 한 승인·수정·영상이 업데이트로 지워지지 않는다.
+서버에서는 콘텐츠를 git 밖 `instance/gibalhae/content/` 에 두고(`GIBALHAE_CONTENT`), `gibalhae-daily` 브랜치(아침 예약 작업이 커밋하는 곳)와 main 의 새 초안만 10분마다 복사해 온다. 그래서 서버에서 한 승인·수정·영상이 업데이트로 지워지지 않는다.
 통합 보드는 `bkkstock/web/templates/gibalhae.html`(보드 메뉴 안에 넣은 판)을 쓰고, 스크립트·CSS는 `ui/static/` 것을 그대로 쓴다.
 
 | 탭 | 하는 일 |

@@ -10,8 +10,19 @@ PORT="${BKK_STOCK_PORT:-8020}"
 PY="$DIR/.venv/bin/python"
 export ARBI_INSTANCE="$DIR/instance" GIBALHAE_CONTENT="$DIR/instance/gibalhae/content"
 
-# 아침 예약 작업이 저장소에 올린 기발해 새 초안을 서버 데이터 폴더로 가져온다 (새 커밋이 없어도 매번)
-sync_drafts() { "$PY" -m bkkstock gibalhae-sync >/dev/null 2>&1 || true; }
+# 기발해 새 초안을 서버 데이터 폴더로 가져온다 (새 커밋이 없어도 매번). 덮어쓰기는 하지 않는다.
+# 아침 예약 작업은 초안을 gibalhae-daily 브랜치에 올린다. 코드(main)와 섞지 않고 그 브랜치의 초안 폴더만 읽는다.
+DRAFT_BRANCH="${GIBALHAE_DRAFT_BRANCH:-gibalhae-daily}"
+sync_drafts() {
+  if git fetch -q origin "$DRAFT_BRANCH" 2>/dev/null; then
+    tmp="$(mktemp -d)"
+    if git archive FETCH_HEAD gibalhae/content 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
+      "$PY" -m bkkstock gibalhae-sync --src "$tmp/gibalhae/content" >/dev/null 2>&1 || true
+    fi
+    rm -rf "$tmp"
+  fi
+  "$PY" -m bkkstock gibalhae-sync >/dev/null 2>&1 || true
+}
 
 git fetch -q origin "$BRANCH" 2>/dev/null || exit 0
 OLD="$(git rev-parse HEAD)"
