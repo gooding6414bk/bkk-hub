@@ -10,7 +10,7 @@ import pytest
 HERE = Path(__file__).parent
 
 
-@pytest.mark.parametrize("script", ["gibalhae_pipeline_check.py", "gibalhae_dash_check.py"])
+@pytest.mark.parametrize("script", ["gibalhae_pipeline_check.py", "gibalhae_dash_check.py", "gibalhae_standalone_check.py"])
 def test_gibalhae_script(script):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("BKK_STOCK", "ARBI_", "GIBALHAE_"))}
     r = subprocess.run([sys.executable, str(HERE / script)], cwd=HERE.parent, env=env, capture_output=True,
