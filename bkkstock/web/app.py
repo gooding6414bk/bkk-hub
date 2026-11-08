@@ -1,25 +1,26 @@
-"""대시보드 웹 앱.  python -m bkkstock web
+"""통합 보드: 📈 주식 + 🎬 기발해 콘텐츠.  python -m bkkstock web
 
-로그인 필수. 키 변경은 HTTPS로 들어왔거나 서버 자신(SSH 터널)에서 접속했을 때만 허용한다.
-화면은 저장된 결과를 읽기만 하고, 무거운 수집은 타이머 작업이 한다.
+Flask 단일 프로세스(waitress). 로그인 하나로 두 화면을 다 본다.
+- 값을 바꾸는 요청은 같은 사이트에서 온 것만 받는다 (Origin/Referer 검사, 건우아비 보드와 같은 방식).
+- 키 변경은 HTTPS로 들어왔거나 서버 자신(SSH 터널)에서 접속했을 때만.
+- 화면은 저장된 결과를 읽기만 하고, 무거운 수집은 타이머 작업이 한다.
 """
 
 from __future__ import annotations
 
 import hmac
-import json
+import os
 import secrets
 import subprocess
 import sys
 import time
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .. import __version__
 from ..clients.base import ApiError
@@ -32,18 +33,13 @@ from . import data
 from .apis import BY_ID, run_test
 
 HERE = Path(__file__).parent
-_settings = get_settings()
-
-app = FastAPI(title="bkk-stock", docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(SessionMiddleware, secret_key=_settings.get("DASH_SECRET") or secrets.token_hex(32),
-                   session_cookie="bkkstock", max_age=14 * 86400, same_site="lax")
-app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
-templates = Jinja2Templates(directory=HERE / "templates")
+REPO = HERE.parents[1]
+JOBS_FROM_UI = {"daily": ["daily", "--force"], "backfill": ["backfill", "--days", "90"],
+                "dart-poll": ["dart-poll"], "first-week-check": ["first-week-check"], "report": ["report"]}
+OPEN_ENDPOINTS = {"login", "healthz", "static"}
 
 _ctx: Ctx | None = None
 _fails: dict[str, list[float]] = defaultdict(list)
-JOBS_FROM_UI = {"daily": ["daily", "--force"], "backfill": ["backfill", "--days", "90"],
-                "dart-poll": ["dart-poll"], "first-week-check": ["first-week-check"], "report": ["report"]}
 
 
 def ctx() -> Ctx:
@@ -58,7 +54,7 @@ def reload_ctx() -> None:
     _ctx = make_ctx(get_settings(reload=True))
 
 
-# ---------------- 공통 ----------------
+# ---------------- 표시 형식 ----------------
 def fmt_num(v, nd=0):
     if v is None:
         return "–"
@@ -79,7 +75,6 @@ def fmt_pct(v, nd=1, ratio=False):
 
 
 def fmt_eok(v):
-    """원 → 억 원."""
     if v is None:
         return "–"
     try:
@@ -103,245 +98,257 @@ def short_ts(s):
     return s[5:16] if len(s) >= 16 else s
 
 
-templates.env.filters.update(num=fmt_num, pct=fmt_pct, eok=fmt_eok, bytes=fmt_bytes, ts=short_ts)
-templates.env.globals.update(version=__version__)
+# ---------------- 보안 ----------------
+def same_origin() -> bool:
+    src = request.headers.get("Origin") or request.headers.get("Referer")
+    if not src:
+        return True   # 브라우저가 아닌 도구. 세션 쿠키는 SameSite=Lax라 다른 사이트에서는 실리지 않는다
+    return urlsplit(src).netloc == request.host
 
 
-def logged_in(request: Request) -> bool:
-    return bool(request.session.get("auth"))
-
-
-def csrf_token(request: Request) -> str:
-    tok = request.session.get("csrf")
-    if not tok:
-        tok = secrets.token_urlsafe(24)
-        request.session["csrf"] = tok
-    return tok
-
-
-def check_csrf(request: Request, token: str | None) -> None:
-    if not token or not hmac.compare_digest(token, request.session.get("csrf") or ""):
-        raise HTTPException(403, "CSRF 토큰이 맞지 않습니다. 새로고침 후 다시 시도하세요.")
-
-
-def secure_context(request: Request) -> bool:
-    if request.url.scheme == "https":
+def secure_context() -> bool:
+    if request.scheme == "https":
         return True
-    host = request.client.host if request.client else ""
-    return host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+    return request.remote_addr in ("127.0.0.1", "::1") and "X-Forwarded-For" not in request.headers
 
 
-def page(request: Request, name: str, **kw):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    c = ctx()
-    return templates.TemplateResponse(request, name, {
-        "csrf": csrf_token(request), "demo": c.settings.demo, "nav": name.split(".")[0], **kw})
+def api_error(status: int, message: str):
+    return jsonify({"ok": False, "message": message, "error": message}), status
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    resp = await call_next(request)
-    resp.headers.setdefault("X-Frame-Options", "DENY")
-    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("Referrer-Policy", "same-origin")
-    resp.headers.setdefault("Cache-Control", "no-store")
-    return resp
+# ---------------- 앱 ----------------
+def load_gibalhae(app: Flask) -> bool:
+    gdir = REPO / "gibalhae"
+    if not (gdir / "pipeline" / "webui.py").exists():
+        return False
+    # 서버에서는 콘텐츠를 git 밖(instance/gibalhae/content)에 둔다. 자동 업데이트가 승인·수정을 지우지 않게.
+    os.environ.setdefault("ARBI_INSTANCE", str(REPO / "instance"))
+    if str(gdir) not in sys.path:
+        sys.path.insert(0, str(gdir))
+    from pipeline.webui import bp  # noqa: E402
+    app.register_blueprint(bp)
+    return True
 
 
-# ---------------- 로그인 ----------------
-@app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request):
-    has_pw = bool(ctx().settings.get("DASH_PASSWORD"))
-    return templates.TemplateResponse(request, "login.html", {"has_pw": has_pw, "error": None, "demo": ctx().settings.demo})
+def create_app() -> Flask:
+    s = get_settings()
+    app = Flask(__name__, template_folder=str(HERE / "templates"), static_folder=str(HERE / "static"))
+    app.secret_key = s.get("DASH_SECRET") or secrets.token_hex(32)
+    app.config.update(SESSION_COOKIE_NAME="bkkhub", SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True,
+                      PERMANENT_SESSION_LIFETIME=timedelta(days=14), MAX_CONTENT_LENGTH=8 * 1024 * 1024,
+                      JSON_AS_ASCII=False)
+    app.json.ensure_ascii = False
+    # 같은 서버의 리버스 프록시(127.0.0.1)가 붙이는 헤더만 믿는다
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.jinja_env.filters.update(num=fmt_num, pct=fmt_pct, eok=fmt_eok, bytes=fmt_bytes, ts=short_ts)
+    app.jinja_env.globals.update(version=__version__)
+    app.config["HAS_GIBALHAE"] = load_gibalhae(app)
+
+    @app.context_processor
+    def inject():
+        tok = session.get("csrf") or secrets.token_urlsafe(24)
+        session.setdefault("csrf", tok)
+        nav = "gibalhae" if request.path.startswith("/gibalhae") else ""
+        return {"csrf": tok, "demo": ctx().settings.demo, "csp_nonce": "", "has_gibalhae": app.config["HAS_GIBALHAE"],
+                "user": getattr(g, "user", None), "nav": nav}
+
+    @app.before_request
+    def gate():
+        ep = request.endpoint or ""
+        if ep in OPEN_ENDPOINTS:
+            if request.method == "POST" and not same_origin():
+                abort(403)
+            return None
+        if not session.get("auth"):
+            if request.path.startswith("/api/"):
+                return api_error(401, "로그인이 필요합니다")
+            return redirect(url_for("login", next=request.path))
+        g.user = {"username": "주인", "role": "admin"}
+        if request.method not in ("GET", "HEAD", "OPTIONS") and not same_origin():
+            return api_error(403, "다른 사이트에서 온 요청은 받지 않습니다")
+        return None
+
+    @app.after_request
+    def headers(resp):
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "same-origin")
+        if not request.path.startswith("/static/"):
+            resp.headers.setdefault("Cache-Control", "no-store")
+        return resp
+
+    register_routes(app)
+    return app
 
 
-@app.post("/login")
-def login(request: Request, password: str = Form("")):
-    ip = request.client.host if request.client else "?"
-    now = time.time()
-    _fails[ip] = [t for t in _fails[ip] if now - t < 600]
-    if len(_fails[ip]) >= 5:
-        return templates.TemplateResponse(request, "login.html", {"has_pw": True, "demo": ctx().settings.demo,
-                                          "error": "실패가 많아 10분 동안 잠겼습니다."}, status_code=429)
-    pw = ctx().settings.get("DASH_PASSWORD")
-    if pw and hmac.compare_digest(password.encode(), pw.encode()):
-        request.session.clear()
-        request.session["auth"] = True
-        csrf_token(request)
-        return RedirectResponse("/", 303)
-    _fails[ip].append(now)
-    return templates.TemplateResponse(request, "login.html", {"has_pw": bool(pw), "demo": ctx().settings.demo,
-                                      "error": "비밀번호가 맞지 않습니다."}, status_code=401)
+def page(name: str, **kw):
+    return render_template(name, nav=name.split(".")[0], **kw)
 
 
-@app.post("/logout")
-def logout(request: Request, csrf: str = Form("")):
-    check_csrf(request, csrf)
-    request.session.clear()
-    return RedirectResponse("/login", 303)
+def register_routes(app: Flask) -> None:
+    # ---------- 로그인 ----------
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        has_pw = bool(ctx().settings.get("DASH_PASSWORD"))
+        if request.method == "GET":
+            return render_template("login.html", has_pw=has_pw, error=None)
+        ip = request.remote_addr or "?"
+        now = time.time()
+        _fails[ip] = [t for t in _fails[ip] if now - t < 600]
+        if len(_fails[ip]) >= 5:
+            return render_template("login.html", has_pw=True, error="실패가 많아 10분 동안 잠겼습니다."), 429
+        pw = ctx().settings.get("DASH_PASSWORD")
+        if pw and hmac.compare_digest(request.form.get("password", "").encode(), pw.encode()):
+            session.clear()
+            session.permanent = True
+            session["auth"] = True
+            nxt = request.args.get("next") or "/"
+            if not nxt.startswith("/") or nxt.startswith("//"):
+                nxt = "/"
+            return redirect(nxt)
+        _fails[ip].append(now)
+        return render_template("login.html", has_pw=bool(pw), error="비밀번호가 맞지 않습니다."), 401
 
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
-@app.get("/healthz")
-def healthz():
-    ok, info = health(ctx())
-    return JSONResponse(info, status_code=200 if ok else 503)
+    @app.get("/healthz")
+    def healthz():
+        ok, info = health(ctx())
+        return jsonify(info), (200 if ok else 503)
 
+    # ---------- 화면 ----------
+    @app.get("/")
+    def index():
+        return page("dashboard.html", d=data.dashboard(ctx()), gb=data.gibalhae_summary() if app.config["HAS_GIBALHAE"] else None)
 
-# ---------------- 화면 ----------------
-@app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    return page(request, "dashboard.html", d=data.dashboard(ctx()))
+    @app.get("/stocks")
+    def stocks():
+        return page("stocks.html", rows=data.watch_rows(ctx()), day=data.ref_day(ctx()))
 
-
-@app.get("/stocks", response_class=HTMLResponse)
-def stocks(request: Request):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    return page(request, "stocks.html", rows=data.watch_rows(ctx()), day=data.ref_day(ctx()))
-
-
-@app.get("/stocks/{code}", response_class=HTMLResponse)
-def stock(request: Request, code: str):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    try:
-        code = normalize_code(code)
-    except ValueError:
-        raise HTTPException(404)
-    return page(request, "stock.html", s=data.stock_detail(ctx(), code))
-
-
-@app.get("/apis", response_class=HTMLResponse)
-def apis(request: Request):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    return page(request, "apis.html", cards=data.api_cards(ctx()), secure=secure_context(request))
-
-
-@app.get("/ops", response_class=HTMLResponse)
-def ops(request: Request):
-    if not logged_in(request):
-        return RedirectResponse("/login", 303)
-    return page(request, "ops.html", o=data.ops(ctx()))
-
-
-# ---------------- 동작 (JSON) ----------------
-def _auth_json(request: Request, need_csrf: bool = False):
-    if not logged_in(request):
-        raise HTTPException(401, "로그인이 필요합니다")
-    if need_csrf:
-        check_csrf(request, request.headers.get("x-csrf"))
-
-
-@app.get("/api/search")
-def api_search(request: Request, q: str = ""):
-    _auth_json(request)
-    return data.search(ctx(), q)
-
-
-@app.post("/api/watch")
-async def api_watch_add(request: Request):
-    _auth_json(request, True)
-    body = await request.json()
-    try:
-        code = normalize_code(body.get("code", ""))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    name = (body.get("name") or data.name_of(ctx(), code) or "").strip()[:60]
-    kind = body.get("kind") if body.get("kind") in ("보유", "관심") else "관심"
-
-    def num(v):
+    @app.get("/stocks/<code>")
+    def stock(code: str):
         try:
-            return float(str(v).replace(",", "")) if v not in (None, "") else None
+            code = normalize_code(code)
         except ValueError:
-            raise HTTPException(400, f"숫자가 아닙니다: {v}")
-    ctx().store.upsert_watch(code, name, kind, num(body.get("qty")), num(body.get("avg_price")),
-                             (body.get("memo") or "")[:200])
-    return {"ok": True, "code": code, "name": name}
+            abort(404)
+        return page("stock.html", s=data.stock_detail(ctx(), code))
+
+    @app.get("/apis")
+    def apis():
+        return page("apis.html", cards=data.api_cards(ctx()), secure=secure_context())
+
+    @app.get("/ops")
+    def ops():
+        return page("ops.html", o=data.ops(ctx()))
+
+    # ---------- 동작 ----------
+    @app.get("/api/search")
+    def api_search():
+        return jsonify(data.search(ctx(), request.args.get("q", "")))
+
+    @app.post("/api/watch")
+    def api_watch_add():
+        body = request.get_json(silent=True) or {}
+        try:
+            code = normalize_code(body.get("code", ""))
+        except ValueError as e:
+            return api_error(400, str(e))
+        name = (body.get("name") or data.name_of(ctx(), code) or "").strip()[:60]
+        kind = body.get("kind") if body.get("kind") in ("보유", "관심") else "관심"
+        try:
+            qty = _num(body.get("qty"))
+            avg = _num(body.get("avg_price"))
+        except ValueError as e:
+            return api_error(400, str(e))
+        ctx().store.upsert_watch(code, name, kind, qty, avg, (body.get("memo") or "")[:200])
+        return jsonify({"ok": True, "code": code, "name": name})
+
+    @app.delete("/api/watch/<code>")
+    def api_watch_del(code: str):
+        ctx().store.remove_watch(code)
+        return jsonify({"ok": True})
+
+    @app.get("/api/stock/<code>/news")
+    def api_news(code: str):
+        try:
+            code = normalize_code(code)
+        except ValueError:
+            abort(404)
+        return jsonify(data.news(ctx(), code, request.args.get("force") == "1"))
+
+    @app.post("/api/apis/<api_id>/test")
+    def api_test(api_id: str):
+        if api_id not in BY_ID:
+            abort(404)
+        try:
+            return jsonify({"ok": True, "message": run_test(ctx(), api_id)})
+        except ApiError as e:
+            return jsonify({"ok": False, "message": str(e)})
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "message": f"{type(e).__name__}: {e}"})
+
+    @app.post("/api/apis/<api_id>/keys")
+    def api_keys(api_id: str):
+        if not secure_context():
+            return api_error(403, "키 변경은 HTTPS나 SSH 터널(localhost)로 접속했을 때만 할 수 있습니다.")
+        a = BY_ID.get(api_id)
+        if not a:
+            abort(404)
+        body = request.get_json(silent=True) or {}
+        allowed = {k for k, _ in a["keys"]}
+        updates = {}
+        for k, v in (body.get("values") or {}).items():
+            if k not in allowed or k not in KNOWN_KEYS:
+                return api_error(400, f"이 API의 키가 아닙니다: {k}")
+            v = (v or "").strip()
+            if v:
+                updates[k] = v
+        if not updates:
+            return api_error(400, "바꿀 값이 없습니다 (빈 칸은 그대로 둡니다)")
+        write_env_values(ctx().settings.env_file, updates)
+        with ctx().store.db() as con:
+            con.execute("INSERT INTO key_changes(at, api, keys, source) VALUES (?,?,?,?)",
+                        (iso_kst(), api_id, ",".join(sorted(updates)), request.remote_addr or ""))
+        if api_id == "kis":
+            ctx().kis.clear_token()
+        reload_ctx()
+        return jsonify({"ok": True, "changed": sorted(updates)})
+
+    @app.post("/api/jobs/<job>")
+    def api_job(job: str):
+        if job not in JOBS_FROM_UI:
+            abort(404)
+        if ctx().settings.demo:
+            return jsonify({"ok": False, "message": "샘플 데이터 모드에서는 실행하지 않습니다."})
+        log = ctx().store.data_dir / "first_week.txt" if job == "first-week-check" else None
+        args = ["nice", "-n", "15", sys.executable, "-m", "bkkstock", *JOBS_FROM_UI[job]]
+        out = open(log, "w") if log else subprocess.DEVNULL
+        subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, start_new_session=True, cwd=REPO)
+        return jsonify({"ok": True, "message": f"{job} 작업을 백그라운드로 시작했습니다. 몇 분 뒤 새로고침하세요."})
+
+    @app.errorhandler(404)
+    def not_found(e):
+        if request.path.startswith("/api/"):
+            return api_error(404, "없습니다")
+        return render_template("error.html", code=404, message="페이지가 없습니다."), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        if request.path.startswith("/api/"):
+            return api_error(403, "허용되지 않은 요청입니다")
+        return render_template("error.html", code=403, message="허용되지 않은 요청입니다."), 403
 
 
-@app.delete("/api/watch/{code}")
-def api_watch_del(request: Request, code: str):
-    _auth_json(request, True)
-    ctx().store.remove_watch(code)
-    return {"ok": True}
-
-
-@app.get("/api/stock/{code}/news")
-def api_news(request: Request, code: str, force: int = 0):
-    _auth_json(request)
+def _num(v):
+    if v in (None, ""):
+        return None
     try:
-        code = normalize_code(code)
+        return float(str(v).replace(",", ""))
     except ValueError:
-        raise HTTPException(404)
-    return data.news(ctx(), code, bool(force))
+        raise ValueError(f"숫자가 아닙니다: {v}")
 
 
-@app.post("/api/apis/{api_id}/test")
-def api_test(request: Request, api_id: str):
-    _auth_json(request, True)
-    if api_id not in BY_ID:
-        raise HTTPException(404)
-    try:
-        msg = run_test(ctx(), api_id)
-        return {"ok": True, "message": msg}
-    except ApiError as e:
-        return {"ok": False, "message": str(e)}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "message": f"{type(e).__name__}: {e}"}
-
-
-@app.post("/api/apis/{api_id}/keys")
-async def api_keys(request: Request, api_id: str):
-    _auth_json(request, True)
-    if not secure_context(request):
-        raise HTTPException(403, "키 변경은 HTTPS나 SSH 터널(localhost)로 접속했을 때만 할 수 있습니다.")
-    a = BY_ID.get(api_id)
-    if not a:
-        raise HTTPException(404)
-    body = await request.json()
-    allowed = {k for k, _ in a["keys"]}
-    updates = {}
-    for k, v in (body.get("values") or {}).items():
-        if k not in allowed or k not in KNOWN_KEYS:
-            raise HTTPException(400, f"이 API의 키가 아닙니다: {k}")
-        v = (v or "").strip()
-        if v:
-            updates[k] = v
-    if not updates:
-        raise HTTPException(400, "바꿀 값이 없습니다 (빈 칸은 그대로 둡니다)")
-    write_env_values(ctx().settings.env_file, updates)
-    with ctx().store.db() as con:
-        con.execute("INSERT INTO key_changes(at, api, keys, source) VALUES (?,?,?,?)",
-                    (iso_kst(), api_id, ",".join(sorted(updates)), request.client.host if request.client else ""))
-    if api_id == "kis":
-        ctx().kis.clear_token()
-    reload_ctx()
-    return {"ok": True, "changed": sorted(updates)}
-
-
-@app.post("/api/jobs/{job}")
-def api_job(request: Request, job: str):
-    _auth_json(request, True)
-    if job not in JOBS_FROM_UI:
-        raise HTTPException(404)
-    if ctx().settings.demo:
-        return {"ok": False, "message": "샘플 데이터 모드에서는 실행하지 않습니다."}
-    log = ctx().store.data_dir / "first_week.txt" if job == "first-week-check" else None
-    args = ["nice", "-n", "15", sys.executable, "-m", "bkkstock", *JOBS_FROM_UI[job]]
-    out = open(log, "w") if log else subprocess.DEVNULL
-    subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, start_new_session=True,
-                     cwd=Path(__file__).resolve().parents[2])
-    return {"ok": True, "message": f"{job} 작업을 백그라운드로 시작했습니다. 몇 분 뒤 새로고침하세요."}
-
-
-@app.exception_handler(HTTPException)
-async def http_error(request: Request, exc: HTTPException):
-    if request.url.path.startswith("/api/"):
-        return JSONResponse({"ok": False, "message": exc.detail}, status_code=exc.status_code)
-    if exc.status_code == 401:
-        return RedirectResponse("/login", 303)
-    return HTMLResponse(f"<p>{exc.status_code} {exc.detail}</p>", status_code=exc.status_code)
+app = create_app()

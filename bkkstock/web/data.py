@@ -355,3 +355,32 @@ def _share(row) -> float | None:
     if tv and nv:
         return nv / tv * 100
     return None
+
+
+def gibalhae_summary() -> dict | None:
+    """대시보드의 기발해 카드: 최근 날짜 상태와 할 일."""
+    try:
+        from pipeline import keys as gkeys
+        from pipeline import webui as gweb
+        from pipeline import common as gc
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        days = [gweb._day_row(d) for d in list(reversed(gc.list_days()))[:6]]
+        kp = gkeys.public()
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e), "days": [], "todo": [], "keys_missing": []}
+    todo = []
+    for d in days:
+        s, b = d.get("shorts") or {}, d.get("blog") or {}
+        if s.get("status") == "draft" or b.get("status") == "draft":
+            todo.append(f"{d['date']} 승인 대기")
+        elif s.get("status") == "approved":
+            todo.append(f"{d['date']} 영상 만들기 대기")
+        elif s.get("status") == "built" and not s.get("youtube"):
+            todo.append(f"{d['date']} 유튜브 올리기 대기")
+        if b.get("status") in ("approved", "built") and not b.get("url"):
+            todo.append(f"{d['date']} 블로그 올리기 대기")
+    required = ("json2video", "youtube_token")       # 쇼츠 제작·올리기에 꼭 필요한 것 (keys.GUIDE 이름)
+    missing = [v["label"] for k, v in kp.items() if k in required and not v["set"]]
+    return {"days": days, "todo": todo[:6], "keys_missing": missing}

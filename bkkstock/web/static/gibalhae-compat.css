@@ -1,0 +1,48 @@
+/* 기발해 화면을 새 보드 안에서 쓰기 위한 연결층.
+   기발해 CSS는 건우아비 보드의 색 변수(--cell, --line …)와 관리 화면 클래스(adm-*)를 전제로 한다.
+   여기서 그 이름들을 새 보드의 색(app.css)으로 이어 준다. 밝은·어두운 모드 둘 다. */
+.gb {
+  --padx: 0px;
+  --line: var(--border); --line2: var(--border);
+  --mut: var(--muted); --fg2: var(--muted); --dim: var(--muted);
+  --chip: var(--soft); --acc: var(--accent);
+  --cell: var(--card); --cell2: var(--soft);
+  --ok: var(--good); --warn: var(--warn); --up: var(--block);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 16px 16px;
+}
+.gb .adm-top { display: flex; align-items: center; gap: 12px; padding: 14px 0 10px; flex-wrap: wrap; }
+.gb .adm-top h1 { margin: 0; font-size: 1.15rem; }
+.gb .adm-btn { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--chip); color: var(--fg); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.gb .adm-btn:hover { filter: brightness(.97); }
+.gb .adm-btn:disabled { opacity: .5; cursor: default; }
+.gb .adm-btn.sm { height: 28px; padding: 0 10px; font-size: .8rem; }
+.gb .adm-btn.danger { color: var(--block); }
+.gb .adm-tabs { display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.gb .adm-tab { padding: 10px 2px 8px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; border-radius: 0; }
+.gb .adm-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.gb .adm-badge { display: inline-block; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 5px; border-radius: 9px; background: var(--warn-bg); color: var(--warn); font-size: 11px; line-height: 18px; text-align: center; }
+.gb .adm-main { padding: 0; }
+.gb .adm-sec { margin: 16px 0 8px; }
+.gb .adm-sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.gb .adm-sec h2 { margin: 0; font-size: 1rem; }
+.gb .adm-note { color: var(--muted); font-size: .8rem; font-weight: 400; }
+.gb .adm-note.err, .gb .err { color: var(--block); }
+.gb .adm-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
+  padding: 10px 16px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: .9rem; }
+.gb .adm-toast.err, .gb .adm-toast.bad, .gb .adm-toast.fail { background: var(--block); color: #fff; }
+.gb code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+.gb .gb-day, .gb .gb-key, .gb .gb-bundle, .gb .gb-job { background: var(--soft); }
+.gb .gb-day:hover { background: var(--border); }
+.gb .gb-log { background: var(--soft); color: var(--fg); }
+/* 상태 칩: 원래는 어두운 화면 전용 색이라 새 보드 색으로 바꾼다 */
+.gb .gb-st.draft { background: var(--warn-bg); color: var(--warn); }
+.gb .gb-st.approved, .gb .gb-st.running { background: var(--info-bg); color: var(--accent); }
+.gb .gb-st.built, .gb .gb-st.published, .gb .gb-st.ok { background: var(--good-bg); color: var(--good); }
+.gb .gb-st.rejected, .gb .gb-st.fail, .gb .gb-st.bad { background: var(--block-bg); color: var(--block); }
+.gb .gb-chip.ok, .gb .adm-note.ok, .gb .gb-check.ok { color: var(--good); }
+.gb .gb-check.bad { color: var(--block); }
+.gb .adm-btn.primary { background: var(--accent); color: var(--accent-fg); }
+@media (max-width: 700px) { .gb { padding: 0 12px 12px; } }
+/* 카드(--soft 배경) 안의 버튼·입력칸은 카드보다 한 단계 밝게/어둡게 */
+.gb .gb-key .adm-btn, .gb .gb-day .adm-btn, .gb .gb-job .adm-btn, .gb .gb-bundle .adm-btn { background: var(--card); border: 1px solid var(--border); }
+.gb .gb-key .gb-field input, .gb .gb-key .gb-field textarea { background: var(--card); }

@@ -4,15 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf" content="{{ csrf }}">
-<title>{% block title %}주식 관리{% endblock %} · bkk-stock</title>
+<title>{% block title %}보드{% endblock %} · bkk hub</title>
 <link rel="stylesheet" href="/static/app.css?v={{ version }}">
+{% block head %}{% endblock %}
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/">bkk<b>stock</b></a>
+  <a class="brand" href="/">bkk<b>hub</b></a>
   <nav>
     <a href="/" class="{{ 'on' if nav == 'dashboard' }}">대시보드</a>
-    <a href="/stocks" class="{{ 'on' if nav in ('stocks', 'stock') }}">주식 관리</a>
+    <a href="/stocks" class="{{ 'on' if nav in ('stocks', 'stock') }}">📈 주식</a>
+    {% if has_gibalhae %}<a href="/gibalhae" class="{{ 'on' if nav == 'gibalhae' }}">🎬 기발해</a>{% endif %}
     <a href="/apis" class="{{ 'on' if nav == 'apis' }}">API 관리</a>
     <a href="/ops" class="{{ 'on' if nav == 'ops' }}">운영</a>
   </nav>
@@ -22,5 +24,6 @@
 <main>{% block content %}{% endblock %}</main>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js?v={{ version }}"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

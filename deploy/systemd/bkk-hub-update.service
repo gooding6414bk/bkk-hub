@@ -1,5 +1,5 @@
 [Unit]
-Description=bkk-stock 자동 업데이트
+Description=bkk hub 자동 업데이트
 After=network-online.target
 
 [Service]

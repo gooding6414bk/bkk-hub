@@ -9,7 +9,8 @@
   first-week-check                     첫 주 점검
   test-apis                            API 연결 확인만
   notify "문구"                        텔레그램으로 한 줄 보내기 (배포 스크립트용)
-  web [--host 127.0.0.1] [--port 8020] 대시보드
+  web [--host 127.0.0.1] [--port 8020] 통합 보드 (주식 + 기발해)
+  gibalhae-sync                        저장소의 새 기발해 초안을 서버 데이터 폴더로 복사
   demo-seed                            샘플 데이터 만들기 (화면 미리보기용)
 """
 
@@ -43,14 +44,25 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("web")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8020)
+    sub.add_parser("gibalhae-sync")
     p = sub.add_parser("demo-seed")
     p.add_argument("--days", type=int, default=70)
     args = ap.parse_args(argv)
 
     if args.cmd == "web":
-        import uvicorn
-        uvicorn.run("bkkstock.web.app:app", host=args.host, port=args.port, workers=1,
-                    proxy_headers=True, forwarded_allow_ips="127.0.0.1", log_level="info")
+        # 기발해 작업 기록이 프로세스 메모리에 있어서 단일 프로세스·여러 스레드로 띄운다 (건우아비 보드와 같은 방식)
+        from waitress import serve
+        from .gibalhae_sync import sync
+        copied = sync()
+        if copied:
+            logging.info("기발해 초안 %d개 파일을 데이터 폴더로 가져옴", len(copied))
+        from .web.app import app
+        serve(app, host=args.host, port=args.port, threads=8, ident="bkk-hub")
+        return
+    if args.cmd == "gibalhae-sync":
+        from .gibalhae_sync import sync, target_dir
+        copied = sync()
+        print(f"{len(copied)}개 파일 → {target_dir()}")
         return
     if args.cmd == "demo-seed":
         from .demo import seed

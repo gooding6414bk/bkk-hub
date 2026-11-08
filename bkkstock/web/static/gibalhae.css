@@ -1,0 +1,56 @@
+/* 기발해 콘텐츠 관리 — admin.css 위에 얹는다 */
+.gb .gb-grow{flex:1}
+.gb-select{height:30px;max-width:min(60vw,420px);border:1px solid var(--line2);border-radius:6px;background:var(--cell);color:var(--fg);font-size:12.5px;padding:0 6px}
+.gb-flow{margin:-2px 0 10px}
+.gb-day{display:flex;gap:12px;align-items:center;width:100%;margin:0 0 6px;padding:10px 12px;border:1px solid transparent;border-radius:10px;
+  background:var(--cell);color:var(--fg);text-align:left;cursor:pointer;font:inherit}
+.gb-day:hover{background:var(--cell2)}
+.gb-day.open{border-color:var(--acc)}
+.gb-day-l{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.gb-day-l b{font-size:13px}
+.gb-title{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gb-day-r{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;justify-content:flex-end;max-width:52%}
+.gb-k{color:var(--mut);font-size:11.5px}
+.gb-st{display:inline-block;padding:1px 8px;border-radius:9px;font-size:11.5px;font-weight:600;background:var(--chip);color:var(--fg2)}
+.gb-st.draft{background:#3a3222;color:#f5c452}
+.gb-st.approved{background:#1f3a4a;color:#6fc8ff}
+.gb-st.built{background:#1f3d2a;color:#7ee29a}
+.gb-st.published,.gb-st.ok{background:#1b4332;color:#9df0b8}
+.gb-st.rejected,.gb-st.fail,.gb-st.bad{background:#4a1f1f;color:#ff8a80}
+.gb-st.running{background:#2a2f4a;color:#9fb4ff}
+.gb-st.none{opacity:.6}
+.gb-chip{display:inline-block;padding:0 6px;border-radius:6px;font-size:11px;background:var(--chip);color:var(--mut)}
+.gb-chip.ok{color:#9df0b8}
+.gb-actions{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
+.adm-btn.primary{background:var(--acc);color:#fff}
+.adm-btn.primary:hover{filter:brightness(1.1)}
+.gb-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gb-col h3{margin:0 0 8px;font-size:14px}
+.gb-col h3 a{color:var(--fg2);font-weight:400;font-size:12px;word-break:break-all}
+.gb-video{display:block;width:100%;max-width:300px;aspect-ratio:9/16;border-radius:12px;background:#000;margin-bottom:6px}
+.gb-empty{padding:14px;border:1px dashed var(--line2);border-radius:10px;color:var(--mut);font-size:12.5px;margin-bottom:8px}
+.gb-bundle{padding:10px 12px;border-radius:10px;background:var(--cell);font-size:12.5px;margin-bottom:8px}
+.gb-bundle a{color:var(--fg)}
+.gb-imgs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.gb-imgs img{width:120px;height:80px;object-fit:cover;border-radius:6px;background:#fff}
+.gb-doc{margin-top:8px}
+.gb-doc summary{cursor:pointer;color:var(--fg2);font-size:12.5px;margin-bottom:6px}
+.gb-doc textarea{width:100%;min-height:360px;margin:6px 0;padding:10px;border:1px solid var(--line2);border-radius:8px;background:var(--cell);color:var(--fg);
+  font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.gb-doc textarea[readonly]{opacity:.7}
+.adm-note.ok{color:#9df0b8}
+.gb-job{margin:0 0 6px;padding:8px 12px;border-radius:10px;background:var(--cell)}
+.gb-job summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px}
+.gb-log{margin:8px 0 0;padding:10px;max-height:360px;overflow:auto;border-radius:8px;background:#0b0c0e;color:var(--fg2);font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+.gb-key{margin:0 0 12px;padding:12px 14px;border-radius:12px;background:var(--cell);border-left:3px solid var(--line2)}
+.gb-key.set{border-left-color:var(--ok)}
+.gb-key-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.gb-field{display:block;margin:6px 0}
+.gb-field>span{display:block;font-size:12px;color:var(--fg2);margin-bottom:3px}
+.gb-field input,.gb-field textarea{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--cell2);color:var(--fg);font-size:13px}
+.gb-field textarea{font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.gb-key-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}
+.gb-check{font-size:12.5px;color:var(--mut)}
+.gb-check.ok{color:#9df0b8}
+.gb-check.bad{color:#ff8a80}
+@media (max-width:760px){.gb-cols{grid-template-columns:1fr}.gb-day{flex-direction:column;align-items:flex-start}.gb-day-r{max-width:none;justify-content:flex-start}}

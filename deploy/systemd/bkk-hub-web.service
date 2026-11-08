@@ -1,0 +1,22 @@
+[Unit]
+Description=bkk hub 통합 보드 (주식 + 기발해)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=PYTHONUNBUFFERED=1
+# 기발해 콘텐츠·키는 git 밖에 둔다 (자동 업데이트가 지우지 않게)
+Environment=ARBI_INSTANCE=__DIR__/instance
+Environment=GIBALHAE_CONTENT=__DIR__/instance/gibalhae/content
+ExecStart=__DIR__/.venv/bin/python -m bkkstock web --host 127.0.0.1 --port __PORT__
+Restart=always
+RestartSec=5
+# 코인 봇이 우선이다
+Nice=10
+# 기발해 영상 제작 작업도 이 서비스에서 따로 프로세스로 돈다
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target

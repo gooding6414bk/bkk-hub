@@ -1,4 +1,5 @@
 {% extends "base.html" %}{% import "_m.html" as m %}
+{% macro gbst(st) -%}{%- set t = {"draft": ("warn", "초안·승인 대기"), "approved": ("run", "승인"), "built": ("ok", "영상 완성"), "published": ("ok", "올림"), "rejected": ("fail", "반려")} -%}{%- set v = t.get(st, ("none", "없음")) -%}<span class="st {{ v[0] }}">{{ v[1] }}</span>{%- endmacro %}
 {% block title %}대시보드{% endblock %}
 {% block content %}
 <section class="status card">
@@ -16,8 +17,28 @@
   <p class="muted small">공시 조회 마지막 {{ (d.last_poll.finished_at | ts) if d.last_poll else '–' }} · 기준일 {{ d.day or '–' }} · 점수 계산 {{ d.n_scored | num }}종목{% if not d.trading_today %} · 오늘은 휴장일{% endif %}</p>
 </section>
 
+{% if gb %}
 <section class="card">
-  <div class="card-head"><h2>내 종목</h2><a href="/stocks" class="pill">관리</a></div>
+  <div class="card-head"><h2>🎬 기발해 콘텐츠</h2><a href="/gibalhae" class="pill">관리</a></div>
+  {% if gb.error %}<p class="err small">{{ gb.error }}</p>{% endif %}
+  {% if gb.keys_missing %}<p class="small t-warn">연결 안 됨: {{ gb.keys_missing | join(', ') }} · <a href="/gibalhae#keys">기발해 → 연결</a>에서 넣으세요</p>{% endif %}
+  {% if gb.todo %}<ul class="todo">{% for t in gb.todo %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  {% if gb.days %}
+  <div class="tbl-wrap"><table class="tbl compact cards">
+    <thead><tr><th>날짜</th><th>제목</th><th>쇼츠</th><th>블로그</th></tr></thead>
+    <tbody>{% for x in gb.days %}<tr>
+      <td class="num" data-label="날짜">{{ x.date[5:] }}</td>
+      <td class="full">{{ x.title or '–' }}</td>
+      <td data-label="쇼츠">{{ gbst(x.shorts.status if x.shorts else none) }}</td>
+      <td data-label="블로그">{{ gbst(x.blog.status if x.blog else none) }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% elif not gb.error %}<p class="empty">아직 콘텐츠가 없습니다. 아침 예약 작업이 초안을 만들면 여기 뜹니다.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>📈 내 종목</h2><a href="/stocks" class="pill">관리</a></div>
   {% if d.watch %}
   <div class="tbl-wrap"><table class="tbl cards">
     <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th>참고 점수</th><th>위험 표시</th></tr></thead>

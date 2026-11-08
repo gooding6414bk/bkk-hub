@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}기발해 콘텐츠{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/gibalhae-compat.css?v={{ version }}"><link rel="stylesheet" href="/static/gibalhae.css?v={{ version }}">{% endblock %}
+{% block content %}
+<div class="adm gb">
+<header class="adm-top">
+  <h1>🎬 기발해 콘텐츠</h1>
+  <span class="adm-note" id="gb-credits"></span>
+  <span class="gb-grow"></span>
+  <button class="adm-btn" id="gb-reload" type="button">새로고침</button>
+</header>
+
+<nav class="adm-tabs" role="tablist">
+  <button class="adm-tab active" type="button" role="tab" data-tab="content">콘텐츠</button>
+  <button class="adm-tab" type="button" role="tab" data-tab="keys">연결<span class="adm-badge" id="gb-keys-badge" hidden></span></button>
+  <button class="adm-tab" type="button" role="tab" data-tab="jobs">작업<span class="adm-badge" id="gb-jobs-badge" hidden></span></button>
+</nav>
+
+<div class="adm-main" id="tab-content">
+  <section class="adm-sec">
+    <div class="adm-sec-head">
+      <h2>날짜별 상태</h2>
+      <span class="adm-note">초안은 아침 예약 작업(클로드)이 만들고, 여기서 승인 → 제작 → 올리기</span>
+      <span class="gb-grow"></span>
+      <select id="gb-topic" class="gb-select" aria-label="소재"></select>
+      <button class="adm-btn sm" id="gb-new" type="button">새 날짜 만들기</button>
+    </div>
+    <div class="gb-flow adm-note">draft(초안) → approved(승인) → built(영상 완성) → published(올림) · rejected(반려)</div>
+    <div id="gb-days"><div class="adm-note">불러오는 중…</div></div>
+  </section>
+  <section class="adm-sec" id="gb-detail" hidden></section>
+</div>
+
+<div class="adm-main" id="tab-keys" hidden>
+  <section class="adm-sec">
+    <div class="adm-sec-head"><h2>연결 — API 키</h2>
+      <span class="adm-note">값은 <code id="gb-keys-file"></code> 에만 저장되고 화면·로그에는 끝 4자리만 보입니다. 저장 뒤 「확인」을 누르면 실제로 불러 봅니다.</span></div>
+    <div id="gb-keys"><div class="adm-note">불러오는 중…</div></div>
+  </section>
+</div>
+
+<div class="adm-main" id="tab-jobs" hidden>
+  <section class="adm-sec">
+    <div class="adm-sec-head"><h2>작업 기록</h2><span class="adm-note">제작·올리기 등은 따로 돌고, 기록은 2초마다 갱신됩니다</span></div>
+    <div id="gb-jobs"><div class="adm-note">아직 없음</div></div>
+  </section>
+</div>
+<div class="adm-toast" id="adm-toast" hidden></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.GB_USER = {{ user.username|tojson }};</script>
+<script src="/static/gibalhae.js?v={{ version }}"></script>
+{% endblock %}

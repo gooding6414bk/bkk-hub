@@ -1,0 +1,5 @@
+# 기발해 콘텐츠 파이프라인 — 보드(requirements.txt)와 별도. pip install -r gibalhae/pipeline/requirements.txt
+# FFmpeg 는 따로 설치한다 (윈도우: winget install Gyan.FFmpeg / 우분투: apt install ffmpeg)
+pillow>=10
+edge-tts>=7
+google-auth-oauthlib>=1.2   # youtube_auth.py(내 PC 에서 한 번) 에만 필요. 업로드 자체는 표준 라이브러리로 한다

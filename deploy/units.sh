@@ -9,8 +9,9 @@ for f in "$SRC"/*; do
   sed -e "s#__DIR__#$BKK_DIR#g" -e "s#__USER__#$BKK_USER#g" -e "s#__PORT__#$PORT#g" "$f" > "/etc/systemd/system/$name"
 done
 systemctl daemon-reload
-systemctl enable --now bkk-stock-web.service >/dev/null
-for t in daily dart-poll morning report watchdog update; do
+systemctl enable --now bkk-hub-web.service >/dev/null
+for t in daily dart-poll morning report watchdog; do
   systemctl enable --now "bkk-stock-$t.timer" >/dev/null
 done
-echo "systemd 설치 완료: 웹 1개, 타이머 6개"
+systemctl enable --now bkk-hub-update.timer >/dev/null
+echo "systemd 설치 완료: 통합 보드 1개, 주식 타이머 5개, 자동 업데이트 1개"

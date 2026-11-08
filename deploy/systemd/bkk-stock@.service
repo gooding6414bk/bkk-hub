@@ -8,6 +8,9 @@ Type=oneshot
 User=__USER__
 WorkingDirectory=__DIR__
 Environment=PYTHONUNBUFFERED=1
+# 기발해 콘텐츠·키는 git 밖에 둔다 (자동 업데이트가 지우지 않게)
+Environment=ARBI_INSTANCE=__DIR__/instance
+Environment=GIBALHAE_CONTENT=__DIR__/instance/gibalhae/content
 ExecStart=__DIR__/.venv/bin/python -m bkkstock %i
 # 코인 봇보다 낮은 우선순위, CPU·메모리 상한
 Nice=15

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# bkk-stock 설치. 저장소 폴더 안에서 일반 사용자(ubuntu)로 실행한다:  bash deploy/install.sh
+# bkk hub 설치 (📈 주식 + 🎬 기발해 통합 보드). 저장소 폴더 안에서 일반 사용자(ubuntu)로 실행한다:  bash deploy/install.sh
+# 같은 서버의 갭 차익거래 봇·건우아비 보드와는 서비스·포트·폴더가 모두 따로다.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
@@ -42,13 +43,17 @@ PY
 )"
 
 echo "== 3/5 데이터 폴더"
-mkdir -p data
-chmod 700 data
+mkdir -p data instance/gibalhae/content
+chmod 700 data instance
+# 기발해 콘텐츠는 git 밖(instance/gibalhae/content)에 둔다. 저장소의 초안을 처음 한 번 복사
+GIBALHAE_CONTENT="$DIR/instance/gibalhae/content" .venv/bin/python -m bkkstock gibalhae-sync
+# 로컬 렌더(--engine local)를 쓸 때만 필요. 기본(JSON2Video)에는 없어도 된다
+command -v ffmpeg >/dev/null 2>&1 || echo "(참고) ffmpeg 없음: 기발해 로컬 렌더를 쓰려면 sudo apt-get install -y ffmpeg"
 
 echo "== 4/5 테스트"
 if .venv/bin/python -m pip show pytest >/dev/null 2>&1 || .venv/bin/pip install -q pytest; then
-  .venv/bin/python -m pytest -q -p no:cacheprovider tests >/tmp/bkk-stock-test.log 2>&1 \
-    && echo "테스트 통과" || { echo "테스트 실패. /tmp/bkk-stock-test.log 를 확인하세요."; exit 1; }
+  .venv/bin/python -m pytest -q -p no:cacheprovider tests >/tmp/bkk-hub-test.log 2>&1 \
+    && echo "테스트 통과" || { echo "테스트 실패. /tmp/bkk-hub-test.log 를 확인하세요."; exit 1; }
 fi
 
 echo "== 5/5 systemd 서비스와 타이머"
@@ -69,5 +74,6 @@ cat <<MSG
 1) 키 넣기:   nano $DIR/.env   (또는 SSH 터널로 대시보드 API 관리 화면에서)
 2) 점검:      cd $DIR && .venv/bin/python -m bkkstock first-week-check
 3) 과거 시세: cd $DIR && nice -n 15 .venv/bin/python -m bkkstock backfill --days 90
-4) 대시보드:  PC에서  ssh -L $PORT:localhost:$PORT ubuntu@서버IP   →   http://localhost:$PORT
+4) 보드:      PC에서  ssh -L $PORT:localhost:$PORT ubuntu@서버IP   →   http://localhost:$PORT
+5) 기발해:    보드 → 🎬 기발해 → 연결 탭에서 JSON2Video·유튜브 키 넣기
 MSG

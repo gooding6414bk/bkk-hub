@@ -253,3 +253,5 @@ details form label { display: flex; flex-direction: column; gap: 4px; }
   .field.small-f { width: calc(50% - 5px); }
   .field.grow { flex-basis: 100%; }
 }
+.todo { margin: 0 0 10px; padding-left: 18px; font-size: .9rem; }
+.todo li { margin: 2px 0; }

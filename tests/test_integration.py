@@ -144,15 +144,14 @@ def test_web_pages_with_real_pipeline_data(ctx, settings, monkeypatch):
     from bkkstock.config import get_settings
     get_settings(reload=True)
     import importlib
-    from fastapi.testclient import TestClient
     from bkkstock.web import app as appmod
     importlib.reload(appmod)
     appmod.reload_ctx()
-    c = TestClient(appmod.app)
+    c = appmod.app.test_client()
     c.post("/login", data={"password": "pw"})
     for url in ("/", "/stocks", "/stocks/086520", "/stocks/005930", "/apis", "/ops"):
         r = c.get(url)
         assert r.status_code == 200, url
-    page = c.get("/stocks").text
+    page = c.get("/stocks").get_data(as_text=True)
     assert "에코프로" in page and "매수 금지" in page
-    assert c.get("/api/search?q=에코").json()[0]["code"] == "086520"
+    assert c.get("/api/search?q=에코").get_json()[0]["code"] == "086520"

@@ -1,0 +1,73 @@
+{
+  "_": [
+    "채널 목소리 고정 설정. default 가 채널의 목소리다 — 첫 편에서 남/여 두 버전을 들어보고 하나로 정한 뒤에는 바꾸지 않는다.",
+    "voice: edge-tts 음성 이름 (ko-KR-InJoonNeural 남·차분 / ko-KR-SunHiNeural 여·또박 / ko-KR-HyunsuMultilingualNeural 남)",
+    "rate: 속도 (-3% = 기본보다 아주 조금 느리게. 더 느리면 기계 티가 난다)",
+    "gap: 장면 사이 쉼(초)",
+    "json2video: JSON2Video 로 렌더할 때의 목소리. ElevenLabs 는 JSON2Video 키로 0크레딧. 카탈로그 https://json2video.com/ai-voices/elevenlabs/languages/korean/"
+  ],
+  "default": "injoon",
+  "injoon": {
+    "voice": "ko-KR-InJoonNeural",
+    "rate": "-3%",
+    "pitch": "+0Hz",
+    "gap": 0.45
+  },
+  "sunhi": {
+    "voice": "ko-KR-SunHiNeural",
+    "rate": "-2%",
+    "pitch": "+0Hz",
+    "gap": 0.45
+  },
+  "hyunsu": {
+    "voice": "ko-KR-HyunsuMultilingualNeural",
+    "rate": "-3%",
+    "pitch": "+0Hz",
+    "gap": 0.45
+  },
+  "json2video": {
+    "default": "hyunbin",
+    "hyunbin": {
+      "voice": "s07IwTCOrCDCaETjUVjx",
+      "model": "elevenlabs",
+      "gap": 0.45,
+      "speed": 1.0,
+      "_": "Hyun Bin 남·중년·차분한 기업 홍보 나레이션"
+    },
+    "yohan": {
+      "voice": "4JJwo477JUAx3HV0T7n7",
+      "model": "elevenlabs",
+      "gap": 0.45,
+      "speed": 1.0,
+      "_": "Yohan Koo 남·중년·확신 있는"
+    },
+    "selly": {
+      "voice": "ETPP7D0aZVdEj12Aa7ho",
+      "model": "elevenlabs",
+      "gap": 0.45,
+      "speed": 1.0,
+      "_": "Selly Han 여·중년·따뜻하고 차분"
+    },
+    "sunny": {
+      "voice": "4p0HBzAAGyju0nYfNntV",
+      "model": "elevenlabs",
+      "gap": 0.45,
+      "speed": 1.0,
+      "_": "Sunny 여·중년·따뜻하고 균형"
+    },
+    "injoon-azure": {
+      "voice": "ko-KR-InJoonNeural",
+      "model": "azure",
+      "gap": 0.45,
+      "speed": 0.97,
+      "_": "Azure InJoon 남 (예비)"
+    },
+    "sunhi-azure": {
+      "voice": "ko-KR-SunHiNeural",
+      "model": "azure",
+      "gap": 0.45,
+      "speed": 0.98,
+      "_": "Azure SunHi 여 (예비)"
+    }
+  }
+}
