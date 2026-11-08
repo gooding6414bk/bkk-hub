@@ -1,0 +1,66 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}운영{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <button data-job="daily">지금 수집</button>
+  <button data-job="backfill">과거 데이터 채우기 (90거래일)</button>
+  <button data-job="dart-poll" class="ghost">공시 조회</button>
+  <button data-job="report" class="ghost">보고 보내기</button>
+</div>
+
+<div class="grid3">
+  <section class="card stat"><h3>종목·시장조치 연속 수집</h3><b class="big num">{{ o.streaks.universe }}</b><span class="muted small">거래일 · 빠지면 복구 불가</span></section>
+  <section class="card stat"><h3>NXT 연속 수집</h3><b class="big num">{{ o.streaks.nxt_prices }}</b><span class="muted small">거래일</span></section>
+  <section class="card stat"><h3>디스크</h3><b class="big num">{{ (o.disk.used / o.disk.total * 100) | round | int }}%</b><span class="muted small">여유 {{ o.disk.free | bytes }} · 데이터 {{ o.data_size | bytes }}</span></section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>일일 수집 기록</h2><span class="muted small">재시도까지 합친 항목별 마지막 상태</span></div>
+  {% if o.table %}
+  <div class="tbl-wrap"><table class="tbl compact">
+    <thead><tr><th>날짜</th><th>전체</th>{% for k, v in o.labels.items() %}<th>{{ v }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in o.table %}<tr><td class="num">{{ r.day[5:] }}</td><td>{{ m.st(r.status) }}</td>
+      {% for k in o.labels %}<td>{{ m.st(r['items'].get(k)) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty">기록이 없습니다.</p>{% endif %}
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <div class="card-head"><h2>다른 작업</h2></div>
+    <table class="tbl compact"><tbody>
+      {% for r in o.other %}<tr><td>{{ r.label }}</td><td>{{ m.st(r.status) }}</td><td class="muted">{{ r.at | ts }}</td></tr>{% else %}<tr><td class="muted">기록 없음</td></tr>{% endfor %}
+    </tbody></table>
+    <h3>자동 일정 (한국 시간)</h3>
+    <table class="tbl compact"><tbody>
+      <tr><td>07:30</td><td>토큰 재발급 · 밤사이 공시 · 어제 실패 항목 재시도</td></tr>
+      <tr><td>08:00~20:50</td><td>10분마다 새 공시 · 보유 종목 위험 공시 즉시 알림</td></tr>
+      <tr><td>20:30</td><td>일일 수집 (평일)</td></tr>
+      <tr><td>21:00</td><td>텔레그램 일일 보고 · 백업</td></tr>
+      <tr><td>21:40</td><td>감시 (수집이 안 돌았으면 알림)</td></tr>
+      <tr><td>10분마다</td><td>새 코드가 있으면 자동 업데이트 (주식 서비스만 재시작)</td></tr>
+    </tbody></table>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>백업</h2><span class="st {{ 'ok' if o.remote_backup else 'warn' }}">{{ '서버 밖 복사 켜짐' if o.remote_backup else '서버 밖 복사 꺼짐' }}</span></div>
+    {% if not o.remote_backup %}<p class="small t-warn">서버가 망가지면 복구 불가 데이터도 같이 사라집니다. .env의 BACKUP_CMD를 설정하거나 Lightsail 자동 스냅샷을 켜세요.</p>{% endif %}
+    <ul class="list compact">{% for n, sz in o.backups %}<li class="small"><code>{{ n }}</code> <span class="muted">{{ sz | bytes }}</span></li>{% else %}<li class="muted">아직 없습니다.</li>{% endfor %}</ul>
+  </section>
+</div>
+
+<section class="card" id="verify">
+  <div class="card-head"><h2>참고 점수 검증</h2><span class="muted small">점수 상위 20%와 하위 20%의 이후 20거래일 초과수익 차이</span></div>
+  {% set v = o.verify %}
+  {% if v.status == 'ok' %}
+    <ul class="quint">{% for q, val in v.quintiles.items() %}<li><span>{{ q }}분위{% if q == 5 %} (점수 높음){% elif q == 1 %} (낮음){% endif %}</span><b class="num {{ 'up' if val > 0 else 'down' }}">{{ '%+.2f' % val }}%</b></li>{% endfor %}</ul>
+    <p>상위−하위 평균 <b class="num">{{ '%+.2f' % v.spread_mean }}%p</b>{% if v.spread_t is not none %} · t {{ v.spread_t }}{% endif %} · {{ v.n_days }}일</p>
+    <p class="muted small">{{ v.note }} 통과 기준은 설계 문서 4장 (예: 비용 2배에서도 연 +1.5%p, t > 2)입니다.</p>
+  {% else %}
+    <p class="empty">아직 검증할 수 없습니다. 점수 기록 {{ v.score_days }}일 / 필요 {{ v.need }}일 (점수를 매긴 뒤 {{ v.horizon }}거래일이 지나야 결과가 나옵니다).</p>
+  {% endif %}
+</section>
+
+{% if o.first_week %}
+<section class="card"><div class="card-head"><h2>첫 주 점검 결과</h2></div><pre class="pre small">{{ o.first_week }}</pre></section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,17 @@
+{% macro grade(o_score, o_grade, o_arrow, blocked, enough=True) -%}
+{%- set cls = 'g-block' if blocked else ('g-none' if not enough or o_score is none else ('g-good' if o_score >= 20 else 'g-ok' if o_score >= 5 else 'g-mid' if o_score > -5 else 'g-weak' if o_score > -20 else 'g-bad')) -%}
+<span class="grade {{ cls }}" title="참고 점수 (검증 전)"><i>{{ o_arrow or '·' }}</i>{{ o_grade or '이력 부족' }}{% if o_score is not none and enough %}<em>{{ '%+.0f' % o_score }}</em>{% endif %}</span>
+{%- endmacro %}
+{% macro flags(fl, limit=3) -%}
+{%- for f in fl if f.level in ('block', 'warn') -%}{% if loop.index <= limit %}<span class="chip {{ f.level }}" title="{{ f.text }}">{{ f.kind }}</span>{% endif %}{%- endfor -%}
+{%- set extra = (fl | selectattr('level', 'in', ['block', 'warn']) | list | length) - limit -%}
+{%- if extra > 0 %}<span class="chip more">+{{ extra }}</span>{% endif -%}
+{%- endmacro %}
+{% macro chg(v) -%}
+{%- if v is none -%}<span class="muted">–</span>{%- else -%}<span class="{{ 'up' if v > 0 else 'down' if v < 0 else 'flat' }}">{{ '%+.2f' % v }}%</span>{%- endif -%}
+{%- endmacro %}
+{% macro dot(state) -%}<span class="dot {{ state }}" aria-hidden="true"></span>{%- endmacro %}
+{% macro st(s) -%}
+{%- set m = {'ok': ('ok', '정상'), 'warn': ('warn', '경고'), 'fail': ('fail', '실패'), 'skip': ('skip', '미설정'), 'partial': ('warn', '일부 실패'), 'running': ('run', '진행 중'), 'skipped': ('skip', '휴장')} -%}
+{%- set v = m.get(s, ('none', '없음')) -%}<span class="st {{ v[0] }}">{{ v[1] }}</span>
+{%- endmacro %}

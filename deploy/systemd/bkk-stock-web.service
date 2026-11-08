@@ -1,0 +1,18 @@
+[Unit]
+Description=bkk-stock 대시보드
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__DIR__/.venv/bin/python -m bkkstock web --host 127.0.0.1 --port __PORT__
+Restart=always
+RestartSec=5
+# 코인 봇이 우선이다
+Nice=10
+MemoryMax=400M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=bkk-stock 일일 보고와 백업 (평일 21:00)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 21:00:00 Asia/Seoul
+Unit=bkk-stock@report.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

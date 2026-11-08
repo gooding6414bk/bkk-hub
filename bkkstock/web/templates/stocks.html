@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}주식 관리{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head"><h2>종목 추가</h2><span class="muted small">보유 종목은 위험 공시가 뜨면 바로 텔레그램으로 알립니다</span></div>
+  <form id="add-form" class="add-form" autocomplete="off">
+    <div class="field grow search-box">
+      <label for="q">종목명 또는 코드</label>
+      <input id="q" name="q" placeholder="예: 삼성전자, 005930" required>
+      <input type="hidden" name="code"><input type="hidden" name="name">
+      <ul id="suggest" class="suggest" role="listbox" hidden></ul>
+    </div>
+    <div class="field"><label for="kind">구분</label><select id="kind" name="kind"><option>관심</option><option>보유</option></select></div>
+    <div class="field small-f"><label for="qty">수량</label><input id="qty" name="qty" inputmode="decimal" placeholder="선택"></div>
+    <div class="field small-f"><label for="avg">평균 단가</label><input id="avg" name="avg_price" inputmode="decimal" placeholder="선택"></div>
+    <div class="field grow"><label for="memo">메모</label><input id="memo" name="memo" maxlength="200" placeholder="선택"></div>
+    <div class="field"><label>&nbsp;</label><button type="submit">추가</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>보유·관심 종목</h2><span class="muted small">기준일 {{ day or '–' }}</span></div>
+  {% if rows %}
+  <div class="tbl-wrap"><table class="tbl cards">
+    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험 표시</th><th>최근 공시</th><th></th></tr></thead>
+    <tbody>
+    {% for w in rows %}
+    <tr class="{{ 'row-block' if w.blocked }}">
+      <td class="full"><a href="/stocks/{{ w.code }}" class="name">{{ w.name or w.code }}</a> <span class="tag {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span><div class="muted small">{{ w.code }}{% if w.memo %} · {{ w.memo }}{% endif %}</div></td>
+      <td class="r num" data-label="종가">{{ w.close | num }}</td>
+      <td class="r num" data-label="등락">{{ m.chg(w.change_pct) }}</td>
+      <td class="r num" data-label="평가손익">{% if w.pnl is not none %}<span class="{{ 'up' if w.pnl > 0 else 'down' if w.pnl < 0 else 'flat' }}">{{ w.pnl | num }}<br><small>{{ '%+.1f' % w.pnl_pct }}%</small></span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="r num" data-label="20일">{{ m.chg((w.ret20 * 100) if w.ret20 is not none else none) }}</td>
+      <td data-label="참고 점수">{{ m.grade(w.score, w.grade, w.arrow, w.blocked, w.enough) }}</td>
+      <td data-label="위험 표시">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
+      <td class="small full" data-label="최근 공시">{% if w.last_disc %}<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ w.last_disc.rcept_no }}" target="_blank" rel="noopener">{{ w.last_disc.report_nm[:24] }}</a><div class="muted">{{ w.last_disc.rcept_dt[4:6] }}/{{ w.last_disc.rcept_dt[6:] }}</div>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="full actions-cell"><button class="ghost danger" data-del="{{ w.code }}" data-name="{{ w.name }}" aria-label="{{ w.name }} 삭제">삭제</button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">위에서 종목을 추가하세요.</p>{% endif %}
+</section>
+
+<section class="card note">
+  <h3>참고 점수 읽는 법</h3>
+  <p><b>내일 오를 확률이 아닙니다.</b> 앞으로 1~3개월 동안 시장 대비 나을 쪽인지 못할 쪽인지에 대한 기울기입니다. 연구로 근거가 있는 신호만 씁니다: 단기 반전, 복권형 종목, 변동성, 외국인·기관 수급, 그리고 회피 엔진의 위험 표시.</p>
+  <p>가중치는 고정돼 있고 화면에서 바꿀 수 없습니다. 매일 기록해서 실제로 맞았는지 <a href="/ops#verify">운영 탭</a>에서 검증합니다. 검증을 통과하기 전에는 참고로만 보세요.</p>
+  <ul class="legend">
+    <li>{{ m.grade(25, '상대적 양호', '↑', False) }}</li><li>{{ m.grade(10, '약간 양호', '↗', False) }}</li><li>{{ m.grade(0, '중립', '→', False) }}</li>
+    <li>{{ m.grade(-10, '약간 약세', '↘', False) }}</li><li>{{ m.grade(-30, '주의', '↓', False) }}</li><li>{{ m.grade(-50, '매수 금지', '⛔', True) }}</li>
+  </ul>
+</section>
+{% endblock %}

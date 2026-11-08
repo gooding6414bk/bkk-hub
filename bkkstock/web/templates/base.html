@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf" content="{{ csrf }}">
+<title>{% block title %}주식 관리{% endblock %} · bkk-stock</title>
+<link rel="stylesheet" href="/static/app.css?v={{ version }}">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">bkk<b>stock</b></a>
+  <nav>
+    <a href="/" class="{{ 'on' if nav == 'dashboard' }}">대시보드</a>
+    <a href="/stocks" class="{{ 'on' if nav in ('stocks', 'stock') }}">주식 관리</a>
+    <a href="/apis" class="{{ 'on' if nav == 'apis' }}">API 관리</a>
+    <a href="/ops" class="{{ 'on' if nav == 'ops' }}">운영</a>
+  </nav>
+  <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost">로그아웃</button></form>
+</header>
+{% if demo %}<div class="demo">샘플 데이터 화면입니다. 실제 시세나 공시가 아닙니다.</div>{% endif %}
+<main>{% block content %}{% endblock %}</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js?v={{ version }}"></script>
+</body>
+</html>

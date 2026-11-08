@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}{{ s.name or s.code }}{% endblock %}
+{% block content %}
+{% set o = s.o %}
+<section class="card stock-head">
+  <div>
+    <h1>{{ s.name or s.code }} <span class="muted">{{ s.code }}</span></h1>
+    <p class="px">{% if s.px %}<b class="num">{{ s.px.close | num }}</b> {{ m.chg(s.px.change_pct) }} <span class="muted small">{{ s.px.date }} 종가 · 거래대금 {{ s.px.value | eok }}{% if s.px.nxt_share %} · NXT {{ '%.0f' % s.px.nxt_share }}%{% endif %}</span>{% else %}<span class="muted">시세 이력이 아직 없습니다.</span>{% endif %}</p>
+  </div>
+  <div class="head-right">
+    {% if o %}{{ m.grade(o.score, o.grade, o.arrow, o.blocked, o.enough_history) }}{% else %}{{ m.grade(none, '이력 부족', '·', False, False) }}{% endif %}
+    <p class="muted small">참고 점수 · 검증 전 · 모델 {{ s.model }}</p>
+    {% if s.watch %}<span class="tag {{ 'own' if s.watch.kind == '보유' }}">{{ s.watch.kind }} 중</span>
+    {% else %}<button data-watch="{{ s.code }}" data-name="{{ s.name }}">관심 종목에 추가</button>{% endif %}
+  </div>
+</section>
+
+<div class="grid2 wide-left">
+  <section class="card">
+    <div class="card-head"><h2>최근 60거래일</h2><span class="muted small">선: 종가 · 막대: 거래대금 (진한 부분 KRX, 연한 부분 NXT) · 점: 급등일</span></div>
+    {{ s.chart | safe }}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>점수 근거</h2></div>
+    {% if o and o.enough_history %}
+      <ul class="bars">
+      {% for b in s.comps %}<li><span class="bl">{{ b.label }}</span><span class="bar"><i class="{{ 'neg' if b.neg else 'pos' }}" style="--w: {{ b.pct }}%"></i></span><b class="bv num">{{ '%+.1f' % b.value }}</b></li>{% endfor %}
+      </ul>
+      <p class="small muted">20일 수익률 {{ m.chg((o.ret20 or 0) * 100) }} · 하루 최대 {{ m.chg((o.max20 or 0) * 100) }} · 변동성 {{ '%.1f' % ((o.vol20 or 0) * 100) }}%</p>
+    {% else %}<p class="empty">점수를 내려면 21거래일 이상 시세 이력이 필요합니다. 운영 탭에서 과거 데이터 채우기를 실행하세요.</p>{% endif %}
+    <h3>위험 표시</h3>
+    {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}"><span class="chip {{ f.level }}">{{ f.kind }}</span> {{ f.text }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted small">회피 엔진이 찾은 위험이 없습니다.</p>{% endif %}
+    {% if s.score_spark %}<h3>점수 흐름 <span class="muted small">{{ s.n_score_days }}일</span></h3>{{ s.score_spark | safe }}{% endif %}
+  </section>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <div class="card-head"><h2>투자자 수급</h2><span class="muted small">{% if s.flows %}최근 {{ s.flows.days }}거래일 순매수 (KRX+NXT 통합){% endif %}</span></div>
+    {% if s.flows %}<ul class="flows">
+      {% for k in ('외국인', '기관', '개인') %}<li><span>{{ k }}</span><b class="num {{ 'up' if s.flows[k] > 0 else 'down' if s.flows[k] < 0 else '' }}">{{ (s.flows[k] / 100) | num(1) }}억</b></li>{% endfor %}
+    </ul><p class="muted small">한국투자증권 금액 단위(백만 원)를 억 원으로 바꿔 표시합니다.</p>
+    {% else %}<p class="empty">수급 데이터가 아직 없습니다. 한국투자증권 키가 있으면 매일 저녁 채워집니다.</p>{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>공시</h2><a class="pill" href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm={{ s.name | urlencode }}" target="_blank" rel="noopener">DART에서 보기</a></div>
+    {% if s.discs %}<ul class="list">
+      {% for x in s.discs %}<li>
+        <a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ x.rcept_no }}" target="_blank" rel="noopener">{{ x.report_nm }}</a>
+        {% for t in x.tags.split(',') if t %}<span class="chip {{ 'block' if t == '부실' else 'warn' if t in ('희석', '매도압력', '소송') else 'good' if t in ('주주환원', '실적', '수주') else 'info' }}">{{ t }}</span>{% endfor %}
+        <div class="muted small">{{ x.rcept_dt[:4] }}-{{ x.rcept_dt[4:6] }}-{{ x.rcept_dt[6:] }} · 처음 본 시각 {{ x.first_seen_at | ts }}</div>
+      </li>{% endfor %}
+    </ul>{% else %}<p class="empty">저장된 공시가 없습니다. 공시는 수집을 시작한 날부터 쌓입니다.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>뉴스</h2><button class="ghost" id="news-reload" data-code="{{ s.code }}">새로 받기</button></div>
+  <div id="news" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
+  <p class="muted small">제목만 보고 위험·호재 단어를 표시합니다. 뉴스는 이미 가격에 반영됐을 가능성이 커서 점수에는 넣지 않습니다.</p>
+</section>
+{% endblock %}

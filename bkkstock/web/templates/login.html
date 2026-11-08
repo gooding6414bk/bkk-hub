@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · bkk-stock</title><link rel="stylesheet" href="/static/app.css?v={{ version }}"></head>
+<body class="login-page">
+<form class="login card" method="post" action="/login">
+  <div class="brand big">bkk<b>stock</b></div>
+  {% if demo %}<p class="demo inline">샘플 데이터 화면</p>{% endif %}
+  {% if not has_pw %}
+    <p class="warnbox">아직 대시보드 비밀번호가 없습니다. 서버에서 <code>deploy/install.sh</code>를 실행하면 만들어집니다.</p>
+  {% else %}
+    <label for="pw">비밀번호</label>
+    <input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <button type="submit">들어가기</button>
+  {% endif %}
+</form>
+</body></html>

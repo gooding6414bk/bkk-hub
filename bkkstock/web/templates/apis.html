@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}API 관리{% endblock %}
+{% block content %}
+{% if not secure %}
+<section class="warnbox">
+  <b>키 입력이 잠겨 있습니다.</b> 지금 접속은 암호화되지 않았거나 외부에서 들어온 접속입니다. 키를 바꾸려면 HTTPS 주소로 들어오거나, PC에서 SSH 터널로 접속하세요.
+  <pre>ssh -L 8020:localhost:8020 ubuntu@서버IP   →   http://localhost:8020/apis</pre>
+  연결 테스트와 상태 확인은 지금도 됩니다.
+</section>
+{% endif %}
+<div class="toolbar"><button data-job="first-week-check">첫 주 점검 실행</button><span class="muted small">모든 API를 한 번씩 불러보고 결과를 운영 탭에 남깁니다.</span></div>
+<div class="api-grid">
+{% for a in cards %}
+<section class="card api" id="api-{{ a.id }}">
+  <div class="card-head">
+    <h2>{{ m.dot(a.state) }} {{ a.name }}</h2>
+    <span class="st {{ a.state }}">{{ {'ok': '정상', 'fail': '오류', 'missing': '키 미설정', 'unknown': '아직 호출 안 함'}[a.state] }}</span>
+  </div>
+  <p class="small">{{ a.purpose }}</p>
+  <dl class="kv">
+    {% for k in a.key_list %}<dt>{{ k.label }}</dt><dd>{% if k.set %}<code>{{ k.masked }}</code>{% else %}<span class="t-warn">없음</span>{% endif %}</dd>{% endfor %}
+    {% if a.public %}<dt>키</dt><dd>필요 없음</dd>{% endif %}
+    <dt>마지막 성공</dt><dd>{{ a.last_ok | ts }}</dd>
+    <dt>마지막 실패</dt><dd>{{ a.last_fail | ts }}</dd>
+    <dt>오늘 호출</dt><dd>{{ a.calls_today | num }}</dd>
+    {% for e in a.extra %}<dt>참고</dt><dd>{{ e }}</dd>{% endfor %}
+  </dl>
+  {% if a.error and a.state == 'fail' %}<p class="err small">{{ a.error }}</p>{% endif %}
+  {% if a.notes %}<p class="muted small">{{ a.notes }}</p>{% endif %}
+  <div class="actions">
+    <button data-test="{{ a.id }}">연결 테스트</button>
+    <span class="test-result small" data-for="{{ a.id }}"></span>
+  </div>
+  {% if a.key_list %}
+  <details class="keyform"{% if not secure %} aria-disabled="true"{% endif %}>
+    <summary>키 변경</summary>
+    {% if secure %}
+    <form data-keys="{{ a.id }}" autocomplete="off">
+      {% for k in a.key_list %}<label>{{ k.label }} <span class="muted small">{{ k.name }}</span><input type="password" name="{{ k.name }}" autocomplete="new-password" placeholder="{{ '바꿀 때만 입력' if k.set else '입력' }}"></label>{% endfor %}
+      <button type="submit">저장</button><span class="muted small">빈 칸은 그대로 둡니다. 저장한 값은 다시 보여주지 않습니다.</span>
+    </form>
+    {% else %}<p class="muted small">HTTPS나 SSH 터널로 접속하면 여기서 바꿀 수 있습니다. 또는 서버의 <code>.env</code> 파일을 직접 고치세요.</p>{% endif %}
+  </details>
+  {% endif %}
+  <details>
+    <summary>발급 안내</summary>
+    <ol class="steps">{% for st in a.steps %}<li>{{ st }}</li>{% endfor %}</ol>
+    {% if a.services %}<p class="small"><b>활용신청할 서비스</b></p><ul class="small svc">{% for sv in a.services %}<li>{{ sv }}</li>{% endfor %}</ul>{% endif %}
+    <p><a href="{{ a.site }}" target="_blank" rel="noopener">{{ a.site }}</a></p>
+  </details>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

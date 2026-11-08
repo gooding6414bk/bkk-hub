@@ -1,0 +1,10 @@
+[Unit]
+Description=bkk-stock 아침 작업 (07:30)
+
+[Timer]
+OnCalendar=*-*-* 07:30:00 Asia/Seoul
+Unit=bkk-stock@morning.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

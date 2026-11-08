@@ -1,0 +1,10 @@
+[Unit]
+Description=bkk-stock 공시 조회 (평일 08:00~20:50, 10분마다)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08..20:00/10:00 Asia/Seoul
+Unit=bkk-stock@dart-poll.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

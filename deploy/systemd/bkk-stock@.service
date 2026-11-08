@@ -1,0 +1,17 @@
+[Unit]
+Description=bkk-stock 작업 %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__DIR__/.venv/bin/python -m bkkstock %i
+# 코인 봇보다 낮은 우선순위, CPU·메모리 상한
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=70%
+MemoryMax=700M
+TimeoutStartSec=2h

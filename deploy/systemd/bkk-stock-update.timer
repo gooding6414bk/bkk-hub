@@ -1,0 +1,9 @@
+[Unit]
+Description=bkk-stock 자동 업데이트 (10분마다)
+
+[Timer]
+OnCalendar=*:0/10
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

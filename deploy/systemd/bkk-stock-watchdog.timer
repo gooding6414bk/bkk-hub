@@ -1,0 +1,10 @@
+[Unit]
+Description=bkk-stock 감시 (평일 21:40)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 21:40:00 Asia/Seoul
+Unit=bkk-stock@watchdog.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

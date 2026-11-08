@@ -1,0 +1,10 @@
+[Unit]
+Description=bkk-stock 일일 수집 (평일 20:30)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 20:30:00 Asia/Seoul
+Unit=bkk-stock@daily.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
