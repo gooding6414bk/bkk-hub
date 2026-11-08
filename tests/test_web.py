@@ -126,15 +126,21 @@ def test_gibalhae_summary_on_dashboard(client, tmp_path, monkeypatch):
     assert "11-08" in home and "승인 대기" in home
 
 
-def test_gibalhae_sync_never_overwrites(tmp_path):
+def test_gibalhae_sync_keeps_server_edits_but_follows_untouched_files(tmp_path):
     from bkkstock.gibalhae_sync import sync
     src = tmp_path / "repo"
     (src / "2026-11-08").mkdir(parents=True)
-    (src / "2026-11-08" / "blog.md").write_text("repo 초안")
+    (src / "2026-11-08" / "blog.md").write_text("status: draft")
+    (src / "2026-11-08" / "shorts.md").write_text("status: draft")
     dst = tmp_path / "server"
-    assert sync(src, dst) == ["2026-11-08/blog.md"]
-    (dst / "2026-11-08" / "blog.md").write_text("서버에서 승인·수정")
-    (src / "2026-11-08" / "blog.md").write_text("repo 새 초안")
-    (src / "2026-11-08" / "shorts.md").write_text("새 파일")
-    assert sync(src, dst) == ["2026-11-08/shorts.md"]
-    assert (dst / "2026-11-08" / "blog.md").read_text() == "서버에서 승인·수정"
+    assert sorted(sync(src, dst)) == ["2026-11-08/blog.md", "2026-11-08/shorts.md"]
+    assert sync(src, dst) == []                                         # 바뀐 것 없음
+    # 서버 대시보드에서 블로그를 승인 (서버 편집)
+    (dst / "2026-11-08" / "blog.md").write_text("status: approved (서버)")
+    # 채팅으로 쇼츠를 승인해서 저장소 쪽 두 파일이 바뀜
+    (src / "2026-11-08" / "blog.md").write_text("status: approved (저장소)")
+    (src / "2026-11-08" / "shorts.md").write_text("status: approved (저장소)")
+    (src / "2026-11-08" / "new.png").write_text("img")
+    assert sorted(sync(src, dst)) == ["2026-11-08/new.png", "2026-11-08/shorts.md"]
+    assert (dst / "2026-11-08" / "blog.md").read_text() == "status: approved (서버)"      # 서버 편집 유지
+    assert (dst / "2026-11-08" / "shorts.md").read_text() == "status: approved (저장소)"  # 손대지 않은 파일은 따라감
