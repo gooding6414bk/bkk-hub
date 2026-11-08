@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bkk hub 설치 (📈 주식 + 🎬 기발해 통합 보드). 저장소 폴더 안에서 일반 사용자(ubuntu)로 실행한다:  bash deploy/install.sh
-# 같은 서버의 갭 차익거래 봇·건우아비 보드와는 서비스·포트·폴더가 모두 따로다.
+# 같은 서버(Ubuntu-1)의 갭 차익거래 봇과는 서비스·포트·폴더·텔레그램 봇이 모두 따로다.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
