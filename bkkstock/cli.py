@@ -9,6 +9,7 @@
   first-week-check                     첫 주 점검
   test-apis                            API 연결 확인만
   notify "문구"                        텔레그램으로 한 줄 보내기 (배포 스크립트용)
+  set-password                         대시보드 비밀번호 새로 만들기
   web [--host 127.0.0.1] [--port 8020] 통합 보드 (주식 + 기발해)
   gibalhae-sync                        저장소의 새 기발해 초안을 서버 데이터 폴더로 복사
   demo-seed                            샘플 데이터 만들기 (화면 미리보기용)
@@ -39,6 +40,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=90)
     sub.add_parser("first-week-check")
     sub.add_parser("test-apis")
+    sub.add_parser("set-password")
     p = sub.add_parser("notify")
     p.add_argument("text")
     p = sub.add_parser("web")
@@ -59,6 +61,14 @@ def main(argv: list[str] | None = None) -> None:
             logging.info("기발해 초안 %d개 파일을 데이터 폴더로 가져옴", len(copied))
         from .web.app import app
         serve(app, host=args.host, port=args.port, threads=8, ident="bkk-hub")
+        return
+    if args.cmd == "set-password":
+        import secrets
+        from .config import get_settings, write_env_values
+        pw = secrets.token_urlsafe(12)
+        write_env_values(get_settings().env_file, {"DASH_PASSWORD": pw, "DASH_SECRET": secrets.token_hex(32)})
+        print(f"새 대시보드 비밀번호: {pw}")
+        print("적용: sudo systemctl restart bkk-hub-web   (기존 로그인은 모두 풀립니다)")
         return
     if args.cmd == "gibalhae-sync":
         from pathlib import Path

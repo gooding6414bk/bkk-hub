@@ -67,7 +67,11 @@ ssh -i <Lightsail 키.pem> -L 8020:localhost:8020 ubuntu@<서버 고정 IP>
 
 **HTTPS 주소 (휴대폰에서 보기)** — 갭 보드가 이미 `gap-52-79-134-12.sslip.io`로 HTTPS를 쓰고 있으니, 같은 리버스 프록시에 주소 하나를 더 붙입니다. sslip.io는 IP가 들어간 이름이면 따로 도메인을 살 필요가 없습니다.
 
-Caddy (갭 보드가 Caddy라면 Caddyfile에 아래 블록만 추가 후 `sudo systemctl reload caddy`):
+갭 보드는 Caddy를 씁니다. 아래 한 줄이면 Caddyfile을 백업하고 블록을 덧붙인 뒤 검사·다시 읽기까지 합니다.
+```bash
+bash ~/bkk-hub/deploy/https.sh        # → https://hub-52-79-134-12.sslip.io
+```
+직접 넣으려면 Caddyfile에 아래 블록을 추가 후 `sudo systemctl reload caddy`:
 ```
 hub-52-79-134-12.sslip.io {
     reverse_proxy 127.0.0.1:8020
@@ -123,6 +127,12 @@ instance/
 ```
 
 서버가 망가지면 복구 불가 데이터도 사라집니다. `.env`의 `BACKUP_CMD`로 서버 밖 복사를 켜거나 Lightsail 자동 스냅샷을 켜세요.
+
+## 비밀번호 바꾸기
+
+```bash
+cd ~/bkk-hub && .venv/bin/python -m bkkstock set-password && sudo systemctl restart bkk-hub-web
+```
 
 ## 명령
 

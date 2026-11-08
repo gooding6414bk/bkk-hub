@@ -74,6 +74,6 @@ cat <<MSG
 1) 키 넣기:   nano $DIR/.env   (또는 SSH 터널로 대시보드 API 관리 화면에서)
 2) 점검:      cd $DIR && .venv/bin/python -m bkkstock first-week-check
 3) 과거 시세: cd $DIR && nice -n 15 .venv/bin/python -m bkkstock backfill --days 90
-4) 보드:      PC에서  ssh -L $PORT:localhost:$PORT ubuntu@서버IP   →   http://localhost:$PORT
+4) 보드 주소: bash deploy/https.sh   →   https://hub-<서버IP>.sslip.io  (휴대폰·PC 어디서나)
 5) 기발해:    보드 → 🎬 기발해 → 연결 탭에서 JSON2Video·유튜브 키 넣기
 MSG
