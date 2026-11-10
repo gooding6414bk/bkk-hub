@@ -229,3 +229,10 @@ def test_unlock_clears_lockout(client, capsys):  # noqa: F811
     from bkkstock import cli
     cli.main(["unlock"])
     assert c.post("/login", data={"password": "pw"}, environ_base={"REMOTE_ADDR": "203.0.113.50"}).status_code == 302
+
+
+def test_head_request_is_not_a_failed_login(client):  # noqa: F811
+    c, appmod = client
+    for _ in range(6):
+        assert c.head("/login", environ_base={"REMOTE_ADDR": "203.0.113.60"}).status_code == 200
+    assert appmod.ctx().store.login_fail_count(0, ip="203.0.113.60") == 0

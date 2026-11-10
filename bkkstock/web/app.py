@@ -287,7 +287,7 @@ def register_routes(app: Flask) -> None:
     @app.route("/login", methods=["GET", "POST"])
     def login():
         has_pw = bool(ctx().settings.get("DASH_PASSWORD"))
-        if request.method == "GET":
+        if request.method != "POST":          # GET·HEAD(감시 도구)는 화면만 — 로그인 실패로 세지 않는다
             return render_template("login.html", has_pw=has_pw, error=None)
         ip = request.remote_addr or "?"
         dev = known_device(app)
