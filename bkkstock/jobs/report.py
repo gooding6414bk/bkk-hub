@@ -33,6 +33,8 @@ def build_message(ctx: Ctx, day: dt.date) -> str:
             counts.append(f"{label} {c:,}" if isinstance(c, int) else f"{label} ✓")
         elif st == "skip":
             counts.append(f"{label} 미설정")
+        elif st == "pending":
+            counts.append(f"{label} 아침에")
         elif st:
             rec = "내일 아침 자동 재시도" if info.get("recoverable", True) else "복구 불가 항목"
             fails.append(f"• {label}: {st} · {(info.get('message') or '')[:120]} ({rec})")

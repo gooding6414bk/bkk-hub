@@ -1,8 +1,9 @@
 [Unit]
-Description=bkk-stock 아침 작업 (07:30)
+Description=bkk-stock 아침 작업 (07:30, 08:30 — KRX 전날 시세·해외 시세·내일 예측가)
 
 [Timer]
 OnCalendar=*-*-* 07:30:00 Asia/Seoul
+OnCalendar=*-*-* 08:30:00 Asia/Seoul
 Unit=bkk-stock@morning.service
 AccuracySec=30s
 

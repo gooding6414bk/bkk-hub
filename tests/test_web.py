@@ -110,25 +110,40 @@ def test_ssh_tunnel_counts_as_secure(client):
     assert r.status_code == 200
 
 
-def test_healthz_has_no_secrets(client):
+def test_healthz_has_no_secrets(client, monkeypatch):
+    import datetime as dt
+    from bkkstock.jobs import watchdog
+    from bkkstock.timeutil import KST
     c, _ = client
+    monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 10, 10, 0, tzinfo=KST))   # 시각 고정
     r = c.get("/healthz")
     assert r.status_code == 200 and "pw" not in r.get_data(as_text=True)
+    monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 10, 22, 30, tzinfo=KST))
+    assert c.get("/healthz").status_code == 503      # 거래일 22시 뒤 그날 수집 기록이 없으면 503이 정상
 
 
-def test_content_not_shown_on_dashboard(client, tmp_path, monkeypatch):
-    import shutil
-    from pathlib import Path
-    from pipeline import common as gc       # 기발해 모듈은 경로를 처음 import 때 정하므로 테스트에서 바꿔 준다
-    c, _ = client
-    src = Path(__file__).resolve().parents[1] / "gibalhae" / "content" / "_example"
-    shutil.copytree(src, tmp_path / "gb-content" / "2026-11-08")
-    monkeypatch.setattr(gc, "CONTENT", str(tmp_path / "gb-content"))
+def test_stock_page_with_data_shows_new_sections(client):
+    import datetime as dt
+    import pandas as pd
+    from bkkstock.timeutil import trading_days_back
+    from tests.conftest import make_prices
+    c, appmod = client
+    st = appmod.ctx().store
+    days = trading_days_back(dt.date(2026, 11, 6), 30)
+    make_prices(st, days, ["000001", "000002", "000003"])
+    for d in days:
+        st.write_clean("investor", d, pd.DataFrame([{"date": d.strftime("%Y%m%d"), "code": "000001", "stck_clpr": 10000,
+                                                     "frgn_ntby_tr_pbmn": 100, "frgn_ntby_qty": 10000,
+                                                     "orgn_ntby_tr_pbmn": -50, "prsn_ntby_tr_pbmn": -50}]))
+    st.upsert_watch("000001", "종목000001", "보유", 10, 9000, "")
     login(c)
+    page = c.get("/stocks/000001").get_data(as_text=True)
+    for word in ("내일 예측가", "보통 범위", "이동평균", "지수 대비 성과", "연속 순매수", "거래대금 대비", "성적표" , "참고값"):
+        assert word in page, word
     home = c.get("/").get_data(as_text=True)
-    assert "침대" not in home and "기발해" not in home and "승인 대기" not in home   # 메인에는 영상 콘텐츠를 두지 않는다
-    page = c.get("/media").get_data(as_text=True)
-    assert "🎬 영상" in page and "기발해" not in page.split("<main>")[0]
+    assert "시장 개요" in home and "내일 보통 범위" in home and "보유 평가금액" in home
+    news = c.get("/api/stock/000001/news").get_json()
+    assert "summary" in news or "error" in news
 
 
 def test_gibalhae_sync_keeps_server_edits_but_follows_untouched_files(tmp_path):

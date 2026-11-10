@@ -13,6 +13,7 @@ from ..clients.datagokr import DataGoKrClient
 from ..clients.kis import KisClient
 from ..clients.krx import KrxClient
 from ..clients.news import NewsClient
+from ..clients.overseas import OverseasClient
 from ..clients.telegram import Telegram
 from ..config import Settings, get_settings
 from ..store import Store
@@ -30,13 +31,14 @@ class Ctx:
     news: NewsClient
     tg: Telegram
     datagokr: DataGoKrClient
+    overseas: OverseasClient
 
 
 def make_ctx(settings: Settings | None = None) -> Ctx:
     s = settings or get_settings()
     store = Store(s.data_dir)
     return Ctx(s, store, KisClient(s, store), KrxClient(s, store), DartClient(s, store),
-               NewsClient(s, store), Telegram(s, store), DataGoKrClient(s, store))
+               NewsClient(s, store), Telegram(s, store), DataGoKrClient(s, store), OverseasClient(s, store))
 
 
 class AlreadyRunning(Exception):
@@ -75,14 +77,20 @@ class Steps:
     run_id: int
     results: list[StepResult] = field(default_factory=list)
 
-    def run(self, item: str, fn, recoverable: bool = True, min_count: int = 1, compare_prev: bool = True):
-        """fn() -> (count, message). 빈 결과(min_count 미만)는 실패, 전일 대비 70% 미만이면 경고."""
+    def run(self, item: str, fn, recoverable: bool = True, min_count: int = 1, compare_prev: bool = True,
+            deferrable: bool = False):
+        """fn() -> (count, message). 빈 결과(min_count 미만)는 실패, 전일 대비 70% 미만이면 경고.
+        deferrable: 아직 안 올라오는 게 정상인 자료(KRX 그날 시세는 다음 영업일 아침)는 '대기'로 두고 아침에 다시 받는다."""
         try:
             count, message = fn()
             status = "ok"
             if count is not None and count < min_count:
-                status = "fail"
-                message = (message + " · " if message else "") + "빈 응답 (실패로 처리)"
+                if deferrable:
+                    status = "pending"
+                    message = (message + " · " if message else "") + "아직 안 올라옴 → 아침 7:30·8:30에 다시 받음"
+                else:
+                    status = "fail"
+                    message = (message + " · " if message else "") + "빈 응답 (실패로 처리)"
             elif compare_prev and count:
                 prev = self.store.last_item_count(item, self.run_id)
                 if prev and count < prev * 0.7:
@@ -101,7 +109,7 @@ class Steps:
         return res
 
     def overall(self) -> str:
-        sts = [r.status for r in self.results if r.status != "skip"]
+        sts = [r.status for r in self.results if r.status not in ("skip", "pending")]
         if not sts:
             return "fail"
         if all(s == "ok" for s in sts):

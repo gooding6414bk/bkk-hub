@@ -33,7 +33,7 @@
     </tbody></table>
     <h3>자동 일정 (한국 시간)</h3>
     <table class="tbl compact"><tbody>
-      <tr><td>07:30</td><td>토큰 재발급 · 밤사이 공시 · 어제 실패 항목 재시도</td></tr>
+      <tr><td>07:30 · 08:30</td><td>토큰 재발급 · 밤사이 공시 · KRX 전날 시세(다음 날 아침에 올라옴)와 점수 · 해외 시세 · 관심 종목 내일 예측가 저장</td></tr>
       <tr><td>08:00~20:50</td><td>10분마다 새 공시 · 보유 종목 위험 공시 즉시 알림</td></tr>
       <tr><td>20:30</td><td>일일 수집 (평일)</td></tr>
       <tr><td>21:00</td><td>텔레그램 일일 보고 · 백업</td></tr>
@@ -58,6 +58,20 @@
   {% else %}
     <p class="empty">아직 검증할 수 없습니다. 점수 기록 {{ v.score_days }}일 / 필요 {{ v.need }}일 (점수를 매긴 뒤 {{ v.horizon }}거래일이 지나야 결과가 나옵니다).</p>
   {% endif %}
+</section>
+
+<section class="card" id="forecast">
+  <div class="card-head"><h2>내일 예측가 실제 기록</h2><span class="muted small">아침에 저장한 예측 vs 그날 실제 · 모델 {{ o.fc_model }}</span></div>
+  {% set f = o.fc_live %}
+  {% if f.n %}
+  <div class="kv2">
+    <div><span>기록</span>{{ f.days }}일 · {{ f.n }}건</div>
+    <div><span>시초가 방향 적중</span>{{ ('%.0f%%' % f.hit) if f.hit is not none else '–' }}</div>
+    <div><span>시초가 오차</span>{{ '%.2f' % f.mae_model }}% <span class="muted small">vs 어제 종가 그대로 {{ '%.2f' % f.mae_base }}%</span></div>
+    <div><span>종가가 보통 범위 안</span>{{ '%.0f%%' % f.range_cover }} <span class="muted small">(목표 68%)</span></div>
+  </div>
+  <p class="caveat">오차가 '어제 종가 그대로'보다 크면 해외 반영 부분은 도움이 안 된다는 뜻입니다. 그때는 범위만 보세요.</p>
+  {% else %}<p class="empty">아직 기록이 없습니다. 관심 종목이 있으면 매일 아침 7:30·8:30에 저장되고, 그날 KRX 시세가 올라온 다음 날부터 비교됩니다.</p>{% endif %}
 </section>
 
 {% if o.first_week %}

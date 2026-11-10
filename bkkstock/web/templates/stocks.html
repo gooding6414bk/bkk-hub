@@ -22,7 +22,7 @@
   <div class="card-head"><h2>보유·관심 종목</h2><span class="muted small">기준일 {{ day or '–' }}</span></div>
   {% if rows %}
   <div class="tbl-wrap"><table class="tbl cards">
-    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험 표시</th><th>최근 공시</th><th></th></tr></thead>
+    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th class="r">평가손익</th><th class="r">20일</th><th class="r">내일 보통 범위</th><th>참고 점수</th><th>위험 표시</th><th>최근 공시</th><th></th></tr></thead>
     <tbody>
     {% for w in rows %}
     <tr class="{{ 'row-block' if w.blocked }}">
@@ -31,6 +31,7 @@
       <td class="r num" data-label="등락">{{ m.chg(w.change_pct) }}</td>
       <td class="r num" data-label="평가손익">{% if w.pnl is not none %}<span class="{{ 'up' if w.pnl > 0 else 'down' if w.pnl < 0 else 'flat' }}">{{ w.pnl | num }}<br><small>{{ '%+.1f' % w.pnl_pct }}%</small></span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="r num" data-label="20일">{{ m.chg((w.ret20 * 100) if w.ret20 is not none else none) }}</td>
+      <td class="r num small" data-label="내일 보통 범위">{% if w.fc %}{{ w.fc.lo1 | num }}~{{ w.fc.hi1 | num }}{% else %}–{% endif %}</td>
       <td data-label="참고 점수">{{ m.grade(w.score, w.grade, w.arrow, w.blocked, w.enough) }}</td>
       <td data-label="위험 표시">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
       <td class="small full" data-label="최근 공시">{% if w.last_disc %}<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ w.last_disc.rcept_no }}" target="_blank" rel="noopener">{{ w.last_disc.report_nm[:24] }}</a><div class="muted">{{ w.last_disc.rcept_dt[4:6] }}/{{ w.last_disc.rcept_dt[6:] }}</div>{% else %}<span class="muted">–</span>{% endif %}</td>

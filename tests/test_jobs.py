@@ -37,10 +37,10 @@ def test_holiday_is_skipped(ctx, monkeypatch):
 
 
 def test_empty_result_is_failure_and_others_continue(ctx, monkeypatch):
-    calls = stub_all(monkeypatch, {"krx_prices": lambda c, d: (0, "비어 있음")})
+    calls = stub_all(monkeypatch, {"investor": lambda c, d: (0, "비어 있음")})
     res = daily.run(ctx, DAY)
     assert res["status"] == "partial"
-    assert res["items"]["krx_prices"]["status"] == "fail"
+    assert res["items"]["investor"]["status"] == "fail"
     assert res["items"]["outlook"]["status"] == "ok"      # 다른 항목은 계속 돈다
 
 
@@ -72,10 +72,10 @@ def test_catch_up_retries_only_failed_recoverable(ctx, monkeypatch):
 
 
 def test_report_message_lists_failures(ctx, monkeypatch):
-    stub_all(monkeypatch, {"krx_prices": lambda c, d: (0, "")})
+    stub_all(monkeypatch, {"investor": lambda c, d: (0, "")})
     daily.run(ctx, DAY)
     msg = report.build_message(ctx, DAY)
-    assert "11/06(금)" in msg and "시세" in msg and "내일 아침 자동 재시도" in msg
+    assert "11/06(금)" in msg and "수급" in msg and "내일 아침 자동 재시도" in msg
 
 
 def test_report_without_run_is_alarm(ctx):
@@ -104,3 +104,16 @@ def test_watch_risk_disclosure_alerts_once(ctx):
 def test_short_code():
     assert daily.short_code("KR7005930003") == "005930"
     assert daily.short_code(5930) == "005930"
+
+
+def test_krx_empty_in_evening_is_pending_not_failure(ctx, monkeypatch):
+    stub_all(monkeypatch, {"krx_prices": lambda c, d: (0, "KRX 비어 있음"), "krx_index": lambda c, d: (0, ""),
+                           "outlook": lambda c, d: (0, "")})
+    res = daily.run(ctx, DAY)
+    assert res["items"]["krx_prices"]["status"] == "pending"
+    assert res["status"] == "ok"                          # 대기는 실패로 치지 않는다
+    msg = report.build_message(ctx, DAY)
+    assert msg.startswith("📊") and "시세 아침에" in msg
+    calls = stub_all(monkeypatch)
+    daily.catch_up(ctx, DAY)                              # 아침에 대기 항목을 다시 받는다
+    assert {n for n, _ in calls} == {"krx_prices", "krx_index", "outlook"}

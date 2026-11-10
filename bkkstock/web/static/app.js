@@ -95,6 +95,7 @@
   }));
 
   // ---------- 뉴스 ----------
+  const TONE = { pos: ["호재", "pos"], neg: ["악재", "neg"], mixed: ["섞임", "mixed"], neutral: ["중립", "info"] };
   async function loadNews(force) {
     const el = $("#news");
     if (!el) return;
@@ -103,9 +104,24 @@
       const r = await call("GET", `/api/stock/${el.dataset.code}/news${force ? "?force=1" : ""}`);
       if (r.error) { el.innerHTML = `<p class="err small">${esc(r.error)}</p>`; return; }
       if (!r.items.length) { el.innerHTML = '<p class="empty">뉴스가 없습니다.</p>'; return; }
-      const tone = { neg: '<span class="chip warn">위험 단어</span>', pos: '<span class="chip good">호재 단어</span>' };
-      el.innerHTML = r.items.map((n) => `<div class="news-item"><a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a> ${tone[n.tone] || ""}<div class="meta">${esc(n.source || "")} · ${esc((n.published || "").replace("T", " ").slice(0, 16))}</div></div>`).join("")
-        + `<p class="muted small">출처: ${r.source === "naver" ? "네이버 검색 API" : "구글 뉴스 RSS"} · ${esc((r.fetched_at || "").slice(11, 16))} 받음</p>`;
+      const sm = r.summary || {};
+      const bar = (r.bar || []).map((b) => `<span class="${b.key}" style="width:${b.pct}%" title="${esc(b.label)} ${b.pct.toFixed(0)}%"></span>`).join("");
+      const legend = (r.bar || []).map((b) => `<span>${esc(b.label)} ${b.pct.toFixed(0)}%</span>`).join("");
+      const groups = (sm.groups || []).map((g) =>
+        `<li><span class="chip ${g.dir === "pos" ? "pos" : "neg"}">${esc(g.category)} ${g.count}</span> <span class="muted small">${g.examples.map(esc).join(" · ")}</span></li>`).join("");
+      const items = r.items.map((n) => {
+        const t = TONE[n.tone] || TONE.neutral;
+        const why = (n.words || []).length ? `<span class="why">근거: ${n.words.map(esc).join(", ")}</span>` : "";
+        const dup = n.dupes ? `<span class="muted small"> · 같은 소식 ${n.dupes}건 더</span>` : "";
+        return `<div class="news-item"><span class="chip ${t[1]}">${t[0]}</span> <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>
+          <div class="meta">${esc(n.source || "")} · ${esc((n.published || "").replace("T", " ").slice(0, 16))}${dup} ${why}</div></div>`;
+      }).join("");
+      const src = r.source === "naver" ? "네이버 검색 API" : r.source === "demo" ? "샘플" : "구글 뉴스 RSS";
+      el.innerHTML = `<p class="small"><b>요약</b> ${esc(sm.summary || "")}</p>
+        <div class="ratio">${bar}</div><div class="ratio-legend">${legend}</div>
+        ${groups ? `<ul class="list compact" style="margin-top:8px">${groups}</ul>` : ""}
+        <h3>기사 ${sm.n || r.items.length}건 <span class="muted small">(원래 ${sm.raw_n || r.items.length}건, 같은 소식 묶음)</span></h3>
+        ${items}<p class="muted small">출처: ${src} · ${esc((r.fetched_at || "").slice(11, 16))} 받음</p>`;
     } catch (err) { el.innerHTML = `<p class="err small">${esc(err.message)}</p>`; }
   }
   if ($("#news")) loadNews(false);

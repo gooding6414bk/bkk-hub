@@ -58,38 +58,84 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
     nxt_set = set(codes[: int(n * 0.35)])
     disclosures = []
     rno = 20260000000000
+    # 가상의 밤사이 해외 시세 (미국 평일 기준)
+    us_days = [tdays[0] - dt.timedelta(days=7) + dt.timedelta(days=k) for k in range((tdays[-1] - tdays[0]).days + 8)]
+    us_days = [d for d in us_days if d.weekday() < 5]
+    us = {}
+    lv = {"EWY": 60.0, "^SOX": 5000.0, "^IXIC": 18000.0, "KRW=X": 1380.0}
+    vol = {"EWY": 0.012, "^SOX": 0.02, "^IXIC": 0.012, "KRW=X": 0.004}
+    ewy_r = {}
+    for d in us_days:
+        common = np.random.normal(0, 1)
+        for sym in lv:
+            r = vol[sym] * (0.7 * common + 0.7 * np.random.normal(0, 1)) * (-0.4 if sym == "KRW=X" else 1)
+            lv[sym] *= 1 + r
+            us.setdefault(sym, []).append({"symbol": sym, "date": d.isoformat(), "open": lv[sym], "close": lv[sym]})
+            if sym == "EWY":
+                ewy_r[d] = r
+    store.write_clean("overseas", tdays[-1], pd.DataFrame([r for rows in us.values() for r in rows]))
+    beta = np.random.uniform(0.4, 1.4, n)
+    prev_close = price.copy()
+    prev_nxt_after = np.zeros(n)
     for di, d in enumerate(tdays):
-        rets = np.random.normal(0.0003, vol_scale)
+        prev_d = tdays[di - 1] if di else d - dt.timedelta(days=1)
+        win = [r for ud, r in ewy_r.items() if prev_d <= ud < d]
+        ewy_win = float(np.prod([1 + r for r in win]) - 1) if win else 0.0
+        gap = beta * ewy_win + 0.4 * prev_nxt_after + np.random.normal(0, 0.004, n)
+        opens = prev_close * (1 + gap)
+        intraday = np.random.normal(0.0002, vol_scale * 0.8)
+        rets = (opens * (1 + intraday)) / prev_close - 1
         for c, hd in {**horse_codes, **material_codes}.items():
             i = codes.index(c)
             if d == hd:
                 rets[i] = 0.24 if c in horse_codes else 0.17
             elif hd < d <= hd + dt.timedelta(days=6):
                 rets[i] = np.random.normal(-0.03, 0.02)
-        prev = price.copy()
-        price = price * (1 + rets)
+        price = prev_close * (1 + rets)
         value = price * shares * np.random.uniform(0.002, 0.02, n)
         for c, hd in {**horse_codes, **material_codes}.items():
             if d == hd:
                 value[codes.index(c)] *= 9
+        hi_ = np.maximum(opens, price) * (1 + np.abs(np.random.normal(0, 0.006, n)))
+        lo_ = np.minimum(opens, price) * (1 - np.abs(np.random.normal(0, 0.006, n)))
         rows = pd.DataFrame({
             "date": d.strftime("%Y%m%d"), "code": codes, "name": names, "market": markets,
-            "open": np.round(prev * (1 + rets / 3)), "high": np.round(price * 1.012), "low": np.round(prev * 0.988),
+            "open": np.round(opens), "high": np.round(hi_), "low": np.round(lo_),
             "close": np.round(price), "change_pct": np.round(rets * 100, 2), "volume": np.round(value / price),
             "value": np.round(value), "mktcap": np.round(price * shares), "listed_shares": np.round(shares),
         })
         store.write_clean("prices_krx", d, rows)
-        nx = rows[rows["code"].isin(nxt_set)][["date", "code", "close"]].copy()
-        nx["value"] = (rows.loc[rows["code"].isin(nxt_set), "value"] * np.random.uniform(0.15, 0.4)).round().values
+        nxt_mask = rows["code"].isin(nxt_set).to_numpy()
+        nxt_after = np.where(nxt_mask, np.random.normal(0, 0.006, n), 0.0)
+        nx = rows[nxt_mask][["date", "code"]].copy()
+        nx["close"] = np.round(price[nxt_mask] * (1 + nxt_after[nxt_mask]))
+        nx["value"] = (rows.loc[nxt_mask, "value"] * np.random.uniform(0.15, 0.4)).round().values
         nx["volume"] = (nx["value"] / nx["close"]).round()
         store.write_clean("prices_nxt", d, nx)
-        inv = pd.DataFrame({"date": d.strftime("%Y%m%d"), "code": codes,
-                            "frgn_ntby_tr_pbmn": np.round(np.random.normal(0, 1, n) * value / 1e6 * 0.05),
-                            "orgn_ntby_tr_pbmn": np.round(np.random.normal(0, 1, n) * value / 1e6 * 0.04)})
-        inv["prsn_ntby_tr_pbmn"] = -(inv["frgn_ntby_tr_pbmn"] + inv["orgn_ntby_tr_pbmn"])
+        prev_nxt_after = nxt_after
+        prev_close = price.copy()
+        frgn = np.round(np.random.normal(0, 1, n) * value / 1e6 * 0.05)
+        orgn_parts = {k: np.round(np.random.normal(0, 1, n) * value / 1e6 * w) for k, w in
+                      (("scrt", 0.012), ("ivtr", 0.01), ("pe_fund", 0.006), ("fund", 0.015), ("insu", 0.005),
+                       ("bank", 0.002), ("mrbn", 0.002))}
+        orgn = sum(orgn_parts.values())
+        etc_corp = np.round(np.random.normal(0, 1, n) * value / 1e6 * 0.006)
+        inv = pd.DataFrame({"date": d.strftime("%Y%m%d"), "code": codes, "stck_clpr": np.round(price),
+                            "frgn_ntby_tr_pbmn": frgn, "orgn_ntby_tr_pbmn": orgn, "etc_corp_ntby_tr_pbmn": etc_corp,
+                            **{f"{k}_ntby_tr_pbmn": v for k, v in orgn_parts.items()}})
+        inv["prsn_ntby_tr_pbmn"] = -(inv["frgn_ntby_tr_pbmn"] + inv["orgn_ntby_tr_pbmn"] + inv["etc_corp_ntby_tr_pbmn"])
+        for k in ("frgn", "orgn", "prsn"):
+            inv[f"{k}_ntby_qty"] = np.round(inv[f"{k}_ntby_tr_pbmn"] * 1e6 / price)
         store.write_clean("investor", d, inv)
         if di >= days - 25:
             store.write_clean("universe", d, uni)
+        if di >= days - 40:
+            wc = [codes[0], codes[2], codes[3], codes[9], codes[30], codes[45]]
+            idx = [codes.index(c) for c in wc]
+            store.write_clean("short", d, pd.DataFrame({"date": d.strftime("%Y%m%d"), "code": wc,
+                                                        "ssts_vol_rlim": np.round(np.random.uniform(0.5, 6, len(wc)), 2)}))
+            store.write_clean("credit", d, pd.DataFrame({"date": d.strftime("%Y%m%d"), "code": wc,
+                                                         "whol_loan_rmnd_rate": np.round(np.random.uniform(0.5, 4, len(wc)), 2)}))
         for _ in range(rnd.randint(2, 5)):
             i = rnd.randrange(n)
             nm = rnd.choice(["분기보고서", "주요사항보고서(자기주식취득결정)", "단일판매ㆍ공급계약체결",
@@ -97,6 +143,18 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
                              "영업(잠정)실적(공정공시)", "기업설명회(IR)개최"])
             rno += 1
             disclosures.append((str(rno), d, codes[i], names[i], nm))
+    # 가상 지수 (가상 종목 평균으로)
+    lvl = {"KOSPI": 2600.0, "KOSDAQ": 850.0}
+    for d in tdays:
+        px = store.read_clean("prices_krx", d)
+        rows_i = []
+        for fam, nm_ in (("KOSPI", "코스피"), ("KOSDAQ", "코스닥")):
+            sub = px[px["market"] == fam]
+            r = float(sub["change_pct"].mean()) / 100
+            lvl[fam] *= 1 + r
+            rows_i.append({"date": d.strftime("%Y%m%d"), "family": fam, "name": nm_, "close": round(lvl[fam], 2),
+                           "change_pct": round(r * 100, 2)})
+        store.write_clean("index", d, pd.DataFrame(rows_i))
     special = [
         (codes[2], material_codes[codes[2]], "단일판매ㆍ공급계약체결"),
         (codes[11], material_codes[codes[11]] - dt.timedelta(days=1), "영업(잠정)실적(공정공시)"),
@@ -125,6 +183,14 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
         df = outlook.compute(store, d)
         if not df.empty:
             store.write_clean("outlook", d, df)
+    from .analysis import forecast as fcmod
+    watch_codes = [r["code"] for r in store.watchlist()]
+    fc = fcmod.forecast_many(store, watch_codes, with_backtest=True)
+    if not fc.empty:
+        t = fc["target"].iloc[0]
+        fc["target"] = fc["target"].astype(str)
+        fc["base_day"] = fc["base_day"].astype(str)
+        store.write_clean("forecast", t, fc)
     for d in tdays[-12:]:
         rid = store.start_run("daily", d)
         for item, cnt in [("universe", n), ("krx_prices", n), ("krx_index", 40), ("nxt_prices", len(nxt_set)),
@@ -141,7 +207,7 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
     for job in ("dart_poll", "morning", "backup"):
         rid = store.start_run(job, tdays[-1])
         store.finish_run(rid, "ok", {})
-    for api in ("kis", "kis_master", "krx", "dart", "telegram", "google_news"):
+    for api in ("kis", "kis_master", "krx", "dart", "telegram", "google_news", "overseas"):
         store.api_mark(api, True, note="auth=header" if api == "krx" else None)
     store.api_mark("datagokr", False, "SERVICE_KEY_IS_NOT_REGISTERED_ERROR (샘플)")
     store.add_alert("위험", f"⛔ [관심] {names[3]}({codes[3]})\n재료 없는 급등 → 매수 금지", codes[3], "demo1")

@@ -25,18 +25,25 @@ def price_history(store: Store, end: dt.date, n: int = 60) -> pd.DataFrame:
     krx = store.read_range("prices_krx", days)
     if krx.empty:
         return krx
+    for c in NUM:                      # 응답 필드가 빠져도(이름이 다르거나) 계산이 죽지 않게
+        if c not in krx.columns:
+            krx[c] = pd.NA
     krx = _to_num(krx, NUM)
     krx["date"] = pd.to_datetime(krx["date"].astype(str), format="mixed").dt.date
     nxt = store.read_range("prices_nxt", days)
     if not nxt.empty:
         nxt = _to_num(nxt, ["volume", "value"])
         nxt["date"] = pd.to_datetime(nxt["date"].astype(str), format="mixed").dt.date
-        nxt = nxt.groupby(["date", "code"], as_index=False)[["volume", "value"]].last()
-        nxt = nxt.rename(columns={"volume": "nxt_volume", "value": "nxt_value"})
+        if "close" not in nxt.columns:
+            nxt["close"] = pd.NA
+        nxt = _to_num(nxt, ["close"])
+        nxt = nxt.groupby(["date", "code"], as_index=False)[["volume", "value", "close"]].last()
+        nxt = nxt.rename(columns={"volume": "nxt_volume", "value": "nxt_value", "close": "nxt_close"})
         krx = krx.merge(nxt, on=["date", "code"], how="left")
     else:
         krx["nxt_volume"] = pd.NA
         krx["nxt_value"] = pd.NA
+        krx["nxt_close"] = pd.NA
     krx["total_value"] = krx["value"].fillna(0) + pd.to_numeric(krx["nxt_value"], errors="coerce").fillna(0)
     krx["total_volume"] = krx["volume"].fillna(0) + pd.to_numeric(krx["nxt_volume"], errors="coerce").fillna(0)
     krx = krx.sort_values(["code", "date"]).drop_duplicates(["code", "date"], keep="last")
@@ -63,3 +70,16 @@ def latest_universe(store: Store, end: dt.date) -> tuple[pd.DataFrame, dt.date |
     if day:
         return store.read_clean("universe", day), day
     return pd.DataFrame(), None
+
+
+def overseas_latest(store: Store) -> pd.DataFrame:
+    """가장 최근에 받은 해외 시세 묶음(1년치)."""
+    day = store.latest_clean_day("overseas")
+    if not day:
+        return pd.DataFrame()
+    df = store.read_clean("overseas", day)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    return df.sort_values(["symbol", "date"]).reset_index(drop=True)

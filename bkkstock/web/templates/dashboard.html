@@ -19,17 +19,51 @@
 
 {# 영상 콘텐츠 카드는 메인에서 뺐다(다른 사람이 보지 않게) — 상단 🎬 으로 들어간다 #}
 
+{% set mk = d.market %}
+{% if mk %}
+<section class="card">
+  <div class="card-head"><h2>시장 개요</h2><span class="muted small">{{ mk.day }} 기준</span></div>
+  <div class="mk">
+    {% for ix in mk.index %}<div><span>{{ ix.name }}</span><b class="num">{{ ix.close | num(2) }}</b> {{ m.chg(ix.change_pct) }}</div>{% endfor %}
+    <div><span>오른 종목 · 내린 종목</span><b><span class="up">{{ mk.up | num }}</span> · <span class="down">{{ mk.down | num }}</span></b>{% if mk.limit_up or mk.limit_down %}<span>상한가 {{ mk.limit_up }} · 하한가 {{ mk.limit_down }}</span>{% endif %}</div>
+    {% if mk.new_high is defined %}<div><span>{{ mk.hl_days }}일 신고가 · 신저가</span><b><span class="up">{{ mk.new_high | num }}</span> · <span class="down">{{ mk.new_low | num }}</span></b></div>{% endif %}
+    {% for o in mk.overseas %}<div><span>{{ o.label }} <span class="muted">({{ o.date }})</span></span><b class="num">{{ o.close | num(2) }}</b> {{ m.chg(o.change_pct) }}</div>{% endfor %}
+  </div>
+  <div class="grid3" style="margin-top:12px">
+    <div><h3>거래대금 상위</h3><ul class="mini-list">{% for r in mk.top_value %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a><span>{{ r.value | eok }} {{ m.chg(r.change_pct) }}</span></li>{% endfor %}</ul></div>
+    <div><h3>많이 오른 종목</h3><ul class="mini-list">{% for r in mk.top_up %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a>{{ m.chg(r.change_pct) }}</li>{% endfor %}</ul></div>
+    <div><h3>많이 내린 종목</h3><ul class="mini-list">{% for r in mk.top_down %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a>{{ m.chg(r.change_pct) }}</li>{% endfor %}</ul></div>
+  </div>
+  <p class="caveat">많이 오른 종목은 매수 후보가 아닙니다. 재료 없는 급등은 아래 '재료 없는 급등'에서 매수 금지로 표시됩니다.</p>
+</section>
+{% endif %}
+
+{% if d.checks %}
+<section class="card">
+  <div class="card-head"><h2>오늘 체크할 것</h2><span class="muted small">보유·관심 종목에서 자동으로 고름</span></div>
+  <ul class="check-list">{% for c in d.checks %}<li>{{ c }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
 <section class="card">
   <div class="card-head"><h2>📈 내 종목</h2><a href="/stocks" class="pill">관리</a></div>
+  {% if d.totals %}{% set t = d.totals %}
+  <div class="kv2">
+    <div><span>보유 평가금액</span><b class="num">{{ t.value | num }}원</b></div>
+    <div><span>평가손익</span><b class="num {{ 'up' if t.pnl > 0 else 'down' if t.pnl < 0 }}">{{ '{:+,.0f}'.format(t.pnl) }}원</b>{% if t.pnl_pct is not none %} {{ m.chg(t.pnl_pct) }}{% endif %}</div>
+    <div><span>오늘 손익</span><b class="num {{ 'up' if t.pnl_today > 0 else 'down' if t.pnl_today < 0 }}">{{ '{:+,.0f}'.format(t.pnl_today) }}원</b></div>
+  </div>
+  {% endif %}
   {% if d.watch %}
   <div class="tbl-wrap"><table class="tbl cards">
-    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th>참고 점수</th><th>위험 표시</th></tr></thead>
+    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th class="r">내일 보통 범위</th><th>참고 점수</th><th>위험 표시</th></tr></thead>
     <tbody>
     {% for w in d.watch %}
       <tr class="{{ 'row-block' if w.blocked }}">
         <td class="full"><a href="/stocks/{{ w.code }}" class="name">{{ w.name or w.code }}</a> <span class="tag {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span></td>
         <td class="r num" data-label="종가">{{ w.close | num }}</td>
         <td class="r num" data-label="등락">{{ m.chg(w.change_pct) }}</td>
+        <td class="r num small" data-label="내일 보통 범위">{% if w.fc %}{{ w.fc.lo1 | num }}~{{ w.fc.hi1 | num }}{% if w.fc.us_ready and w.fc.pred_gap %}<div class="muted">시초 {{ '%+.1f' % (w.fc.pred_gap * 100) }}%</div>{% endif %}{% else %}–{% endif %}</td>
         <td data-label="참고 점수">{{ m.grade(w.score, w.grade, w.arrow, w.blocked, w.enough) }}</td>
         <td data-label="위험 표시">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
       </tr>

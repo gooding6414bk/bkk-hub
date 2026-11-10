@@ -41,6 +41,12 @@ def run(ctx: Ctx, days: int = 90, end: dt.date | None = None, with_outlook: bool
                 if len(out["errors"]) > 10:
                     break
         out["investor_watch"] = backfill_watch_investor(ctx, end)
+        out["short_credit_watch"] = backfill_watch_short_credit(ctx, end)
+        try:
+            from .morning import collect_overseas
+            out["overseas"] = collect_overseas(ctx)
+        except Exception as e:  # noqa: BLE001
+            out["overseas"] = str(e)
         if with_outlook:
             n_out = 0
             for d in trading_days_back(end, min(days, 40)):
@@ -73,4 +79,44 @@ def backfill_watch_investor(ctx: Ctx, end: dt.date) -> str:
             continue
         ctx.store.write_clean("investor", d, pd.DataFrame(rows))
         n += 1
+    return f"관심 {len(codes)}종목 · {n}일치"
+
+
+def backfill_watch_short_credit(ctx: Ctx, end: dt.date, days: int = 60) -> str:
+    """관심 종목 공매도·신용 60일 (차트·표용)."""
+    codes = ctx.store.watch_codes()
+    if not codes or not ctx.settings.has("KIS_APP_KEY", "KIS_APP_SECRET"):
+        return "건너뜀"
+    start = trading_days_back(end, days)[0]
+    short_by: dict[str, list[dict]] = {}
+    credit_by: dict[str, list[dict]] = {}
+    for code in codes:
+        try:
+            for r in ctx.kis.short_daily(code, start, end):
+                short_by.setdefault(r["stck_bsop_date"], []).append(dict(r, code=code, date=r["stck_bsop_date"]))
+        except ApiError:
+            pass
+        d = end
+        for _ in range(3):           # 한 번에 30행씩
+            try:
+                rows = ctx.kis.credit_daily(code, d)
+            except ApiError:
+                break
+            if not rows:
+                break
+            for r in rows:
+                credit_by.setdefault(r["deal_date"], []).append(dict(r, code=code, date=r["deal_date"]))
+            oldest = min(r["deal_date"] for r in rows)
+            d = dt.date(int(oldest[:4]), int(oldest[4:6]), int(oldest[6:])) - dt.timedelta(days=1)
+            if d < start:
+                break
+    n = 0
+    for table, by in (("short", short_by), ("credit", credit_by)):
+        have = set(ctx.store.clean_days(table))
+        for ymd, rows in by.items():
+            dd = dt.date(int(ymd[:4]), int(ymd[4:6]), int(ymd[6:]))
+            if dd in have or dd < start:
+                continue
+            ctx.store.write_clean(table, dd, pd.DataFrame(rows))
+            n += 1
     return f"관심 {len(codes)}종목 · {n}일치"

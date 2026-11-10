@@ -11,9 +11,13 @@ from functools import lru_cache
 
 import pandas as pd
 
+from ..analysis import flows as flowmod
+from ..analysis import forecast as fcmod
+from ..analysis import market as marketmod
+from ..analysis import newsread
 from ..analysis import outlook
 from ..analysis.flags import horse_events
-from ..analysis.history import investor_history, latest_universe, price_history
+from ..analysis.history import _to_num, investor_history, latest_universe, price_history
 from ..clients.base import ApiError
 from ..config import mask
 from ..jobs.common import Ctx
@@ -124,6 +128,9 @@ def watch_rows(ctx: Ctx) -> list[dict]:
             "enough": bool(o.get("enough_history")) if o else False,
             "ret20": o.get("ret20") if o else None, "flags": _flags(o),
             "last_disc": last_disc.get(w["code"]),
+            "fc": forecast_for(ctx, w["code"]),
+            "value_now": close * w["qty"] if close and w.get("qty") else None,
+            "pnl_today": (close * w["qty"] * (chg / (100 + chg))) if close and w.get("qty") and chg is not None else None,
         })
     return rows
 
@@ -139,6 +146,55 @@ def _mtime(ctx: Ctx) -> float:
 def _cached_compute(data_dir: str, day: str, codes: tuple, mtime: float):
     from ..store import Store
     return outlook.compute(Store(data_dir), dt.date.fromisoformat(day), list(codes))
+
+
+@lru_cache(maxsize=4)
+def _market_cached(data_dir: str, day: str, mtime: float, ov_mtime: float):
+    from ..store import Store
+    return marketmod.overview(Store(data_dir), dt.date.fromisoformat(day))
+
+
+def market_overview(ctx: Ctx) -> dict | None:
+    day = ref_day(ctx)
+    if not day:
+        return None
+    try:
+        return _market_cached(ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_items(ctx: Ctx, rows: list[dict]) -> list[str]:
+    """보유·관심 종목에서 오늘 볼 만한 것을 자동으로 고른다."""
+    out = []
+    day = ref_day(ctx)
+    inv = investor_history(ctx.store, day, 10) if day else pd.DataFrame()
+    since = (now_kst().date() - dt.timedelta(days=3)).strftime("%Y%m%d")
+    for w in rows:
+        nm = w.get("name") or w["code"]
+        for f in w.get("flags") or []:
+            if f["level"] == "block":
+                out.append(f"⛔ {nm}: {f['text']}")
+        if w.get("change_pct") is not None and abs(w["change_pct"]) >= 5:
+            out.append(f"{'📈' if w['change_pct'] > 0 else '📉'} {nm}: 하루 {w['change_pct']:+.1f}% 움직임")
+        if not inv.empty:
+            iv = inv[inv["code"] == w["code"]]
+            if len(iv):
+                br = flowmod.breakdown(iv)
+                st = (br or {}).get("streak", {})
+                for who in ("외국인", "기관"):
+                    k = st.get(who, 0)
+                    if abs(k) >= 4:
+                        out.append(f"{'🟢' if k > 0 else '🔴'} {nm}: {who} {abs(k)}일 연속 순{'매수' if k > 0 else '매도'}")
+        new = ctx.store.query("SELECT report_nm, tags FROM disclosures WHERE stock_code=? AND rcept_dt>=? ORDER BY rcept_dt DESC",
+                              (w["code"], since))
+        if new:
+            risky = [d for d in new if any(t in (d["tags"] or "") for t in ("희석", "부실", "매도압력", "소송"))]
+            out.append(f"📄 {nm}: 최근 3일 공시 {len(new)}건" + (f" (위험 분류 {len(risky)}건)" if risky else ""))
+        fc = w.get("fc")
+        if fc and fc.get("us_ready") and abs(fc.get("pred_gap") or 0) >= 0.01:
+            out.append(f"🌙 {nm}: 밤사이 해외 반영 예상 시초가 {fc['pred_gap'] * 100:+.1f}% (참고값)")
+    return out[:12]
 
 
 def dashboard(ctx: Ctx) -> dict:
@@ -165,9 +221,19 @@ def dashboard(ctx: Ctx) -> dict:
         """SELECT * FROM disclosures WHERE tags != '' AND (tags LIKE '%희석%' OR tags LIKE '%부실%' OR tags LIKE '%매도압력%')
            AND stock_code != '' ORDER BY first_seen_at DESC LIMIT 15""")
     apis = api_cards(ctx)
+    watch = watch_rows(ctx)
+    own = [w for w in watch if w.get("kind") == "보유" and w.get("value_now")]
+    totals = None
+    if own:
+        totals = {"value": sum(w["value_now"] for w in own),
+                  "pnl": sum(w["pnl"] for w in own if w.get("pnl") is not None),
+                  "pnl_today": sum(w["pnl_today"] for w in own if w.get("pnl_today") is not None)}
+        cost = totals["value"] - totals["pnl"]
+        totals["pnl_pct"] = totals["pnl"] / cost * 100 if cost else None
     return {
+        "market": market_overview(ctx), "totals": totals, "checks": check_items(ctx, watch),
         "day": day, "today": today, "trading_today": is_trading_day(today), "last_run": last, "item_status": items,
-        "last_poll": polls[0] if polls else None, "watch": watch_rows(ctx), "horses": horses[:15],
+        "last_poll": polls[0] if polls else None, "watch": watch, "horses": horses[:15],
         "material": material[:10], "risky_disclosures": risky,
         "alerts": ctx.store.query("SELECT * FROM alerts ORDER BY id DESC LIMIT 8"),
         "api_ok": sum(1 for a in apis if a["state"] == "ok"),
@@ -175,6 +241,58 @@ def dashboard(ctx: Ctx) -> dict:
         "api_missing": sum(1 for a in apis if a["state"] == "missing" and not a.get("optional")),
         "n_scored": len(out_df),
     }
+
+
+def _overseas_mtime(ctx: Ctx) -> float:
+    try:
+        return os.path.getmtime(ctx.store.clean_dir / "overseas")
+    except OSError:
+        return 0.0
+
+
+@lru_cache(maxsize=4)
+def _fc_context(data_dir: str, day: str, mtime: float, ov_mtime: float):
+    from ..store import Store
+    return fcmod.build_context(Store(data_dir), dt.date.fromisoformat(day))
+
+
+def fc_context(ctx: Ctx):
+    day = ref_day(ctx)
+    if not day:
+        return None
+    return _fc_context(ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx))
+
+
+@lru_cache(maxsize=64)
+def _forecast_cached(data_dir: str, day: str, mtime: float, ov_mtime: float, code: str, hour: int):
+    c = _fc_context(data_dir, day, mtime, ov_mtime)
+    return fcmod.forecast(c, code) if c else None
+
+
+def forecast_for(ctx: Ctx, code: str) -> dict | None:
+    day = ref_day(ctx)
+    if not day:
+        return None
+    try:
+        return _forecast_cached(ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx),
+                                code, now_kst().hour)
+    except Exception:  # noqa: BLE001 — 예측가가 실패해도 화면은 뜬다
+        return None
+
+
+def _index_series(ctx: Ctx, days: list, name: str) -> dict:
+    out = {}
+    for d in days:
+        df = ctx.store.read_clean("index", d)
+        if df is None or df.empty or "name" not in df:
+            continue
+        hit = df[df["name"].astype(str) == name]
+        if not hit.empty:
+            try:
+                out[d] = float(str(hit.iloc[0]["close"]).replace(",", ""))
+            except (TypeError, ValueError):
+                pass
+    return out
 
 
 def stock_detail(ctx: Ctx, code: str) -> dict:
@@ -188,29 +306,63 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
         extra = _cached_compute(ctx.store.data_dir.as_posix(), day.isoformat(), (code,), _mtime(ctx))
         if extra is not None and not extra.empty:
             o = extra.iloc[0].to_dict()
-    hist = price_history(ctx.store, day, 60) if day else pd.DataFrame()
+    hist = price_history(ctx.store, day, 120) if day else pd.DataFrame()
     h = hist[hist["code"] == code].sort_values("date") if not hist.empty else pd.DataFrame()
-    chart = ""
+    chart = rel_chart = ""
     last_px = {}
+    market = ""
+    stats = {k: None for k in ("ret5", "ret20", "ret60", "vol20", "hi", "lo", "from_hi", "days", "value_x")}
     if not h.empty:
         name = name or str(h.iloc[-1].get("name") or "")
+        market = str(h.iloc[-1].get("market") or "")
         ev = horse_events(h)
         dates = list(h["date"])
         marks = [dates.index(d) for d in ev["date"] if d in dates] if not ev.empty else []
-        chart = charts.price_chart([d.isoformat() for d in dates], list(h["close"]), list(h["value"].fillna(0)),
-                                   list(pd.to_numeric(h["nxt_value"], errors="coerce").fillna(0)), marks)
+        num = lambda col: [(_num(v)) for v in h[col]] if col in h else [None] * len(h)  # noqa: E731
+        chart = charts.candle_chart([d.isoformat() for d in dates], num("open"), num("high"), num("low"), num("close"),
+                                    list(h["value"].fillna(0)), list(pd.to_numeric(h["nxt_value"], errors="coerce").fillna(0)),
+                                    marks=marks)
+        # 지수 대비 상대 성과 (처음 = 100)
+        idx_name = "코스닥" if market.upper().startswith("KOSDAQ") or market == "코스닥" else "코스피"
+        idx = _index_series(ctx, dates, idx_name)
+        closes = num("close")
+        if closes and closes[0]:
+            base_i = next((idx[d] for d in dates if d in idx), None)
+            s_stock = [c / closes[0] * 100 if c else None for c in closes]
+            s_idx = [(idx[d] / base_i * 100) if (d in idx and base_i) else None for d in dates]
+            series = [(name or code, s_stock, "s1")]
+            if any(v is not None for v in s_idx):
+                series.append((idx_name, s_idx, "s2"))
+            rel_chart = charts.multi_line(series, [d.isoformat() for d in dates], zero=100, fmt=lambda v: f"{v:,.0f}")
         lr = h.iloc[-1]
         last_px = {"close": _num(lr.get("close")), "change_pct": _num(lr.get("change_pct")), "date": lr["date"],
-                   "value": _num(lr.get("total_value")), "nxt_share": _share(lr)}
-    inv = investor_history(ctx.store, day, 20) if day else pd.DataFrame()
-    flows = None
+                   "value": _num(lr.get("total_value")), "nxt_share": _share(lr), "mktcap": _num(lr.get("mktcap"))}
+        c_ser = pd.Series(closes, dtype=float)
+        rets = c_ser.pct_change(fill_method=None)
+        for k in (5, 20, 60):
+            if len(c_ser) > k and c_ser.iloc[-k - 1]:
+                stats[f"ret{k}"] = (c_ser.iloc[-1] / c_ser.iloc[-k - 1] - 1) * 100
+        if len(rets.dropna()) >= 10:
+            stats["vol20"] = float(rets.tail(20).std() * 100)
+        stats["hi"] = float(c_ser.max())
+        stats["lo"] = float(c_ser.min())
+        stats["from_hi"] = (c_ser.iloc[-1] / c_ser.max() - 1) * 100
+        stats["days"] = len(c_ser)
+        v20 = h["total_value"].tail(20).mean() if "total_value" in h else None
+        stats["value_x"] = float(h["total_value"].iloc[-1] / v20) if v20 else None
+    inv = investor_history(ctx.store, day, 60) if day else pd.DataFrame()
+    flow = None
+    flow_chart = ""
     if not inv.empty:
         iv = inv[inv["code"] == code]
         if len(iv):
-            flows = {k: float(iv[c].fillna(0).sum()) for k, c in
-                     (("외국인", "frgn_ntby_tr_pbmn"), ("기관", "orgn_ntby_tr_pbmn"), ("개인", "prsn_ntby_tr_pbmn"))}
-            flows["days"] = len(iv)
-    discs = ctx.store.query("SELECT * FROM disclosures WHERE stock_code=? ORDER BY rcept_dt DESC, rcept_no DESC LIMIT 25", (code,))
+            flow = flowmod.breakdown(iv, h if not h.empty else None)
+            if flow and flow.get("cum"):
+                series = [(k, [v / 1e8 for v in vals], cls) for (k, vals), cls in zip(flow["cum"].items(), ("s1", "s2", "s3"))]
+                flow_chart = charts.multi_line(series, flow["dates"], zero=0, fmt=lambda v: f"{v:,.0f}", unit="억")
+    sc = _short_credit(ctx, day, code)
+    discs = ctx.store.query("SELECT * FROM disclosures WHERE stock_code=? ORDER BY rcept_dt DESC, rcept_no DESC LIMIT 40", (code,))
+    disc_sum = newsread.disclosure_summary(discs)
     hist_scores = []
     for d in ctx.store.clean_days("outlook")[-40:]:
         df = ctx.store.read_clean("outlook", d)
@@ -221,9 +373,22 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
         comps = charts.bars_pm([(outlook.EXPLAIN[k], float(o.get(k) or 0)) for k in
                                 ("reversal", "lottery", "lowvol", "flow", "flag_penalty")], 20)
     watch = {w["code"]: w for w in ctx.store.watchlist()}.get(code)
-    return {"code": code, "name": name, "day": day, "o": o, "flags": _flags(o), "chart": chart, "px": last_px,
-            "flows": flows, "discs": discs, "score_spark": charts.sparkline(hist_scores, 160, 36),
-            "n_score_days": len(hist_scores), "comps": comps, "watch": watch, "model": outlook.MODEL_VERSION}
+    return {"code": code, "name": name, "day": day, "o": o, "flags": _flags(o), "chart": chart, "rel_chart": rel_chart,
+            "px": last_px, "stats": stats, "market": market, "flow": flow, "flow_chart": flow_chart, "sc": sc,
+            "discs": discs[:25], "disc_sum": disc_sum, "disc_bar": charts.tone_bar(disc_sum["ratio"]),
+            "score_spark": charts.sparkline(hist_scores, 160, 36), "n_score_days": len(hist_scores), "comps": comps,
+            "watch": watch, "model": outlook.MODEL_VERSION, "fc": forecast_for(ctx, code), "fc_model": fcmod.MODEL_VERSION}
+
+
+def _short_credit(ctx: Ctx, day, code: str) -> dict:
+    if not day:
+        return {}
+    days = trading_days_back(day, 60)
+    frames = {}
+    for t in ("short", "credit"):
+        df = ctx.store.read_range(t, days)
+        frames[t] = df[df["code"].astype(str) == code] if not df.empty and "code" in df else None
+    return flowmod.short_credit(frames["short"], frames["credit"])
 
 
 def news(ctx: Ctx, code: str, force: bool = False) -> dict:
@@ -231,9 +396,11 @@ def news(ctx: Ctx, code: str, force: bool = False) -> dict:
     if rows and not force:
         age = now_kst() - dt.datetime.fromisoformat(rows[0]["fetched_at"])
         if age < dt.timedelta(minutes=30):
-            return {"items": json.loads(rows[0]["items"]), "fetched_at": rows[0]["fetched_at"], "source": ctx.news.source}
+            return _with_summary({"items": json.loads(rows[0]["items"]), "fetched_at": rows[0]["fetched_at"],
+                                  "source": ctx.news.source}, name_of(ctx, code))
     if ctx.settings.demo:
-        return {"items": [], "error": "샘플 데이터 모드에서는 뉴스를 받지 않습니다 (가상 회사입니다).", "source": ctx.news.source}
+        return _with_summary({"items": _demo_news(name_of(ctx, code) or code), "fetched_at": now_kst().isoformat(timespec="seconds"),
+                              "source": "demo"}, name_of(ctx, code))
     name = name_of(ctx, code) or code
     try:
         items = ctx.news.search(f"{name} 주가" if ctx.news.source == "google_rss" else name, 15)
@@ -243,7 +410,25 @@ def news(ctx: Ctx, code: str, force: bool = False) -> dict:
     with ctx.store.db() as con:
         con.execute("INSERT OR REPLACE INTO news_cache(code, fetched_at, items) VALUES (?,?,?)",
                     (code, iso_kst(), json.dumps(items, ensure_ascii=False)))
-    return {"items": items, "fetched_at": iso_kst(), "source": ctx.news.source}
+    return _with_summary({"items": items, "fetched_at": iso_kst(), "source": ctx.news.source}, name)
+
+
+def _with_summary(d: dict, subject: str = "") -> dict:
+    sm = newsread.summarize(d.get("items") or [], subject)
+    d["items"] = sm.pop("items")
+    d["summary"] = sm
+    d["bar"] = charts.tone_bar(sm["ratio"])
+    return d
+
+
+def _demo_news(name: str) -> list[dict]:
+    base = [("{n}, 2분기 최대 실적…영업이익 컨센서스 상회", "샘플경제"), ("{n} 대규모 공급계약 체결", "샘플일보"),
+            ("{n} 공급계약 체결 소식에 강세", "샘플투데이"), ("{n}, 운영자금 마련 위해 유상증자 결정", "샘플뉴스"),
+            ("증권가 \"{n} 목표주가 상향\"", "샘플리서치"), ("{n} 관련 소송 1심 결과 주목", "샘플법률"),
+            ("{n} 신제품 공개 행사", "샘플테크"), ("외국인 순매도에 {n} 약세", "샘플마켓")]
+    now = now_kst()
+    return [{"title": t.format(n=name), "link": "#", "published": (now - dt.timedelta(hours=i * 7)).isoformat(timespec="minutes"),
+             "source": src} for i, (t, src) in enumerate(base)]
 
 
 def api_cards(ctx: Ctx) -> list[dict]:
@@ -320,6 +505,7 @@ def ops(ctx: Ctx) -> dict:
         first_week = fw.read_text(encoding="utf-8")
     return {"table": table, "labels": ITEM_LABELS, "streaks": streaks, "disk": du, "data_size": _dir_size(ctx.store.data_dir),
             "backups": backups[-10:], "other": other, "verify": outlook.verify(ctx.store), "first_week": first_week,
+            "fc_live": fcmod.live_record(ctx.store), "fc_model": fcmod.MODEL_VERSION,
             "remote_backup": bool(ctx.settings.get("BACKUP_CMD"))}
 
 

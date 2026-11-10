@@ -29,5 +29,39 @@ def run(ctx: Ctx) -> dict:
         out["catch_up"] = daily.catch_up(ctx, prev_trading_day(today))
     except Exception as e:  # noqa: BLE001
         out["catch_up"] = str(e)
+    try:
+        out["overseas"] = collect_overseas(ctx)
+    except Exception as e:  # noqa: BLE001
+        out["overseas"] = str(e)
+    try:
+        out["forecast"] = save_forecasts(ctx)
+    except Exception as e:  # noqa: BLE001
+        out["forecast"] = str(e)
     out["sent"] = send_pending_alerts(ctx)
     return out
+
+
+def collect_overseas(ctx: Ctx) -> str:
+    """밤사이 미국장(EWY·반도체·나스닥)과 원/달러 1년치. 내일 예측가와 시장 개요에 쓴다."""
+    import pandas as pd
+    rows = ctx.overseas.all_history("1y")
+    day = now_kst().date()
+    ctx.store.write_raw(day, "overseas", rows)
+    ctx.store.write_clean("overseas", day, pd.DataFrame(rows))
+    return f"{len(rows)}행"
+
+
+def save_forecasts(ctx: Ctx) -> str:
+    """관심·보유 종목의 내일 예측가를 저장 (나중에 실제와 비교해 적중률을 쌓는다)."""
+    from ..analysis import forecast as fcmod
+    codes = ctx.store.watch_codes()
+    if not codes:
+        return "관심 종목 없음"
+    df = fcmod.forecast_many(ctx.store, codes, with_backtest=True)
+    if df.empty:
+        return "시세 이력 없음"
+    target = df["target"].iloc[0]
+    df["target"] = df["target"].astype(str)
+    df["base_day"] = df["base_day"].astype(str)
+    ctx.store.write_clean("forecast", target, df)
+    return f"{len(df)}종목 → {target}"

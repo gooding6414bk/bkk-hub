@@ -54,6 +54,12 @@ APIS = [
         "steps": ["네이버 개발자센터 → 애플리케이션 등록", "사용 API에서 '검색' 선택", "Client ID와 Secret 확인"],
     },
     {
+        "id": "overseas", "name": "해외 시세 (야후 파이낸스, 키 불필요)", "status_ids": ["overseas"], "public": True,
+        "purpose": "밤사이 미국 상장 한국 ETF(EWY)·필라델피아 반도체·나스닥·원/달러. 내일 예측가와 시장 개요에 씁니다.",
+        "keys": [], "site": "https://finance.yahoo.com/quote/EWY",
+        "steps": ["키가 필요 없습니다. 비공식 경로라 막히면 내일 예측가의 '해외 반영' 부분만 빠지고 변동 범위는 그대로 나옵니다."],
+    },
+    {
         "id": "telegram", "name": "텔레그램 봇 (주식 전용)", "status_ids": ["telegram"],
         "purpose": "일일 보고, 보유 종목 위험 알림, 수집 실패 알림.",
         "keys": [("TELEGRAM_BOT_TOKEN", "봇 토큰"), ("TELEGRAM_CHAT_ID", "chat_id")],
@@ -84,4 +90,6 @@ def run_test(ctx, api_id: str) -> str:
         return ctx.news.test()
     if api_id == "telegram":
         return ctx.tg.test()
+    if api_id == "overseas":
+        return ctx.overseas.test()
     raise KeyError(api_id)

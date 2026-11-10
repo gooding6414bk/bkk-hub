@@ -12,6 +12,6 @@
 {%- endmacro %}
 {% macro dot(state) -%}<span class="dot {{ state }}" aria-hidden="true"></span>{%- endmacro %}
 {% macro st(s) -%}
-{%- set m = {'ok': ('ok', '정상'), 'warn': ('warn', '경고'), 'fail': ('fail', '실패'), 'skip': ('skip', '미설정'), 'partial': ('warn', '일부 실패'), 'running': ('run', '진행 중'), 'skipped': ('skip', '휴장')} -%}
+{%- set m = {'ok': ('ok', '정상'), 'warn': ('warn', '경고'), 'fail': ('fail', '실패'), 'skip': ('skip', '미설정'), 'partial': ('warn', '일부 실패'), 'running': ('run', '진행 중'), 'skipped': ('skip', '휴장'), 'pending': ('run', '아침에')} -%}
 {%- set v = m.get(s, ('none', '없음')) -%}<span class="st {{ v[0] }}">{{ v[1] }}</span>
 {%- endmacro %}

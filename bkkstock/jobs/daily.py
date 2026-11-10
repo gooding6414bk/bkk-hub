@@ -29,6 +29,7 @@ def short_code(v) -> str:
     return s.zfill(6) if s.isdigit() else s
 
 
+DEFERRABLE = {"krx_prices", "krx_index", "outlook"}   # KRX는 그날 시세를 다음 영업일 아침에 올린다
 RECOVERABLE = {
     "universe": False, "krx_prices": True, "krx_index": True, "nxt_prices": False,
     "investor": True, "disclosures": True, "watch_short_credit": True, "outlook": True,
@@ -233,6 +234,8 @@ def collect_watch_short_credit(ctx: Ctx, day: dt.date):
 
 
 def compute_outlook(ctx: Ctx, day: dt.date):
+    if ctx.store.read_clean("prices_krx", day) is None:
+        return 0, f"{day} KRX 시세가 아직 없어 점수는 시세를 받은 뒤 계산"
     df = outlook.compute(ctx.store, day)
     if df.empty:
         return 0, "시세 이력이 없어 점수를 못 냈습니다"
@@ -282,7 +285,7 @@ def run(ctx: Ctx, day: dt.date | None = None, force: bool = False, only: list[st
             if only and name not in only:
                 continue
             steps.run(name, lambda fn=fn: fn(ctx, day), recoverable=RECOVERABLE[name], min_count=min_count,
-                      compare_prev=name not in ("watch_short_credit",))
+                      compare_prev=name not in ("watch_short_credit",), deferrable=name in DEFERRABLE)
         status = steps.overall()
         ctx.store.finish_run(rid, status, steps.summary())
         send_pending_alerts(ctx)
@@ -296,7 +299,7 @@ def catch_up(ctx: Ctx, day: dt.date | None = None) -> dict:
     latest = ctx.store.latest_item_status("daily", day)
     if not latest:
         return run(ctx, day, force=True, only=[n for n, r in RECOVERABLE.items() if r])
-    retry = [n for n, ok in RECOVERABLE.items() if ok and latest.get(n) in ("fail", None)]
+    retry = [n for n, ok in RECOVERABLE.items() if ok and latest.get(n) in ("fail", "pending", None)]
     if not retry:
         return {"status": "nothing"}
     if "krx_prices" in retry and "outlook" not in retry:
