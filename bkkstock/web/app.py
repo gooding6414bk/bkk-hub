@@ -148,7 +148,7 @@ def create_app() -> Flask:
     def inject():
         tok = session.get("csrf") or secrets.token_urlsafe(24)
         session.setdefault("csrf", tok)
-        nav = "gibalhae" if request.path.startswith("/gibalhae") else ""
+        nav = "gibalhae" if request.path.startswith(("/gibalhae", "/media")) else ""
         return {"csrf": tok, "demo": ctx().settings.demo, "csp_nonce": "", "has_gibalhae": app.config["HAS_GIBALHAE"],
                 "user": getattr(g, "user", None), "nav": nav}
 
@@ -222,7 +222,7 @@ def register_routes(app: Flask) -> None:
     # ---------- 화면 ----------
     @app.get("/")
     def index():
-        return page("dashboard.html", d=data.dashboard(ctx()), gb=data.gibalhae_summary() if app.config["HAS_GIBALHAE"] else None)
+        return page("dashboard.html", d=data.dashboard(ctx()))   # 영상 콘텐츠 요약은 메인에 두지 않는다(🎬 화면에서만)
 
     @app.get("/stocks")
     def stocks():

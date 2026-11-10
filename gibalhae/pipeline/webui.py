@@ -70,6 +70,7 @@ def _admin_only():
 
 # ------------------------------------------------------------------ 화면 --
 @bp.get("/gibalhae")
+@bp.get("/media")
 def page():
     cfg = current_app.config
     return render_template("gibalhae.html", username=_username(), home_url=cfg.get("GIBALHAE_HOME_URL", "/"),

@@ -13,6 +13,7 @@ import httpx
 
 from ..config import Settings
 from ..store import Store
+from ..timeutil import prev_trading_day
 from .base import ApiError, NotConfigured, make_http
 
 BASE_URL = "https://data-dbg.krx.co.kr/svc/apis"
@@ -89,11 +90,23 @@ class KrxClient:
     def index_daily(self, family: str, day: dt.date) -> list[dict]:
         return self.get(ENDPOINTS[("index", family)], day)
 
+    def latest_trades(self, day: dt.date, back: int = 3) -> tuple[dt.date, list[dict]]:
+        """day 부터 거꾸로, 유가증권 일별매매정보가 실제로 있는 첫 거래일과 그 행.
+        KRX 는 그날 시세를 다음 영업일 아침에 올리므로, 밤에 그날 날짜로 물으면 빈 목록이 온다."""
+        d = day
+        for _ in range(back + 1):
+            rows = self.daily_trades("KOSPI", d)
+            if rows:
+                return d, rows
+            d = prev_trading_day(d)
+        return day, []
+
     def test(self, day: dt.date) -> str:
-        rows = self.daily_trades("KOSPI", day)
+        d, rows = self.latest_trades(day)
         if not rows:
-            raise ApiError(self.api, "empty", f"{day} 유가증권 일별매매정보가 비어 있습니다")
-        return f"{day} 유가증권 {len(rows)}종목 응답"
+            raise ApiError(self.api, "empty", f"{day} 부터 최근 거래일 유가증권 일별매매정보가 비어 있습니다")
+        note = "" if d == day else f" · {day} 치는 아직 안 올라옴(다음 영업일 아침)"
+        return f"{d} 유가증권 {len(rows)}종목 응답{note}"
 
 
 # KRX 응답 → 정리 열 이름

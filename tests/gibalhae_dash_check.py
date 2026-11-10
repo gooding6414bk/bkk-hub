@@ -27,8 +27,8 @@ def check(cond, msg):
 
 check(c.get("/gibalhae").status_code in (302, 401), "로그인 전 /gibalhae 막힘")
 c.post("/login", data={"password": "test-pass-123"})
-r = c.get("/gibalhae"); check(r.status_code == 200 and "기발해 콘텐츠".encode() in r.data and "gibalhae.js" in r.data.decode(), "/gibalhae 화면")
-r = c.get("/"); check("🎬".encode() in r.data and "/gibalhae" in r.data.decode(), "통합 보드 상단 🎬 기발해 메뉴")
+r = c.get("/media"); check(r.status_code == 200 and "🎬 영상".encode() in r.data and "gibalhae.js" in r.data.decode(), "/media 화면 (예전 /gibalhae 도 열림)")
+r = c.get("/"); check("🎬".encode() in r.data and 'href="/media"' in r.data.decode() and "기발해".encode() not in r.data, "보드 상단 🎬 메뉴 · 메인에 이름 안 보임")
 
 o = c.get("/api/gibalhae/overview").get_json()
 check(o["days"] and o["days"][0]["date"] == "2026-10-24" and o["days"][0]["shorts"]["status"] == "draft", "overview: 예시 날짜 draft")

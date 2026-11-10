@@ -50,11 +50,14 @@ def test_login_redirects_to_next_but_not_offsite(client):
 def test_pages_render_empty_state(client):
     c, _ = client
     login(c)
-    for url in ("/", "/stocks", "/apis", "/ops", "/stocks/005930", "/gibalhae"):
+    for url in ("/", "/stocks", "/apis", "/ops", "/stocks/005930", "/gibalhae", "/media"):
         r = c.get(url)
         assert r.status_code == 200, url
     home = c.get("/").get_data(as_text=True)
-    assert "아직 일일 수집 기록이 없습니다" in home and "🎬 기발해" in home and "📈 주식" in home
+    assert "아직 일일 수집 기록이 없습니다" in home and 'href="/media"' in home and "📈 주식" in home
+    assert "건우<b>주식</b>" in home and "bkk hub" not in home and "bkk<b>hub" not in home
+    for url in ("/", "/stocks", "/apis", "/ops", "/login"):     # 메인 화면들에 콘텐츠 이름이 드러나지 않는다
+        assert "기발해" not in c.get(url).get_data(as_text=True), url
 
 
 def test_cross_site_post_blocked(client):
@@ -113,7 +116,7 @@ def test_healthz_has_no_secrets(client):
     assert r.status_code == 200 and "pw" not in r.get_data(as_text=True)
 
 
-def test_gibalhae_summary_on_dashboard(client, tmp_path, monkeypatch):
+def test_content_not_shown_on_dashboard(client, tmp_path, monkeypatch):
     import shutil
     from pathlib import Path
     from pipeline import common as gc       # 기발해 모듈은 경로를 처음 import 때 정하므로 테스트에서 바꿔 준다
@@ -123,7 +126,9 @@ def test_gibalhae_summary_on_dashboard(client, tmp_path, monkeypatch):
     monkeypatch.setattr(gc, "CONTENT", str(tmp_path / "gb-content"))
     login(c)
     home = c.get("/").get_data(as_text=True)
-    assert "11-08" in home and "승인 대기" in home
+    assert "침대" not in home and "기발해" not in home and "승인 대기" not in home   # 메인에는 영상 콘텐츠를 두지 않는다
+    page = c.get("/media").get_data(as_text=True)
+    assert "🎬 영상" in page and "기발해" not in page.split("<main>")[0]
 
 
 def test_gibalhae_sync_keeps_server_edits_but_follows_untouched_files(tmp_path):

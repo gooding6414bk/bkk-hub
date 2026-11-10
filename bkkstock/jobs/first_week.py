@@ -31,7 +31,15 @@ def run(ctx: Ctx) -> list[tuple[str, str, str]]:
     check("한국투자증권 토큰·시세", ctx.kis.test)
     check("종목 마스터 파일", lambda: f"코스피 {len(ctx.kis.download_master('KOSPI')):,}바이트")
     check("KRX Open API", lambda: ctx.krx.test(ref))
-    check("KRX 지수", lambda: f"{len(ctx.krx.index_daily('KOSPI', ref))}개 지수")
+    # KRX 는 그날 시세를 다음 영업일 아침에 올린다. KRX 대조 검사는 자료가 있는 가장 최근 거래일로 한다
+    krx_day: dict = {}
+
+    def krx_latest():
+        if "d" not in krx_day:
+            krx_day["d"], krx_day["rows"] = ctx.krx.latest_trades(ref)
+        return krx_day["d"], krx_day["rows"]
+
+    check("KRX 지수", lambda: f"{krx_latest()[0]} {len(ctx.krx.index_daily('KOSPI', krx_latest()[0]))}개 지수")
     check("OpenDART (접수 시각 필드 확인)", lambda: ctx.dart.test(ref))
     check("공공데이터포털", lambda: ctx.datagokr.test(prev_trading_day(ref)))
     check("뉴스", ctx.news.test)
@@ -51,19 +59,22 @@ def run(ctx: Ctx) -> list[tuple[str, str, str]]:
     check("KIS 통합 = KRX + NXT 대조", kis_consistency)
 
     def survivorship():
-        old = trading_days_back(ref, 500)[0]
+        day = krx_latest()[0]
+        old = trading_days_back(day, 500)[0]
         then = ctx.krx.daily_trades("KOSDAQ", old)
-        now = ctx.krx.daily_trades("KOSDAQ", ref)
+        now = ctx.krx.daily_trades("KOSDAQ", day)
+        if not now or not then:
+            raise ApiError("krx", "empty", f"코스닥 시세가 비어 있어 비교할 수 없습니다 ({old}: {len(then)}행, {day}: {len(now)}행)")
         from .daily import short_code
         a = {short_code(r.get("ISU_CD")) for r in then}
         b = {short_code(r.get("ISU_CD")) for r in now}
         gone = a - b
-        return (f"{old} 코스닥 {len(a):,}종목 중 지금 없는 종목 {len(gone):,}개도 그날 시세가 있음 "
+        return (f"{old} 코스닥 {len(a):,}종목 중 {day}에 없는 종목 {len(gone):,}개도 그날 시세가 있음 "
                 f"→ KRX 과거 데이터에 상장폐지 종목 포함")
     check("상장폐지 종목 과거 시세", survivorship)
 
     def krx_fields():
-        rows = ctx.krx.daily_trades("KOSPI", ref)
+        _, rows = krx_latest()
         from ..clients.krx import TRADE_COLS
         have = set(rows[0].keys()) if rows else set()
         missing = [k for k in TRADE_COLS if k not in have]
