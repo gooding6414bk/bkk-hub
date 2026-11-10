@@ -37,12 +37,19 @@ def run(ctx: Ctx, day: dt.date) -> dict:
         shutil.copyfileobj(f, g)
     tmp.unlink()
     out["ops"] = gz.name
-    raw_day = ctx.store.raw_dir / day.isoformat()
-    if raw_day.exists():
-        tar = bdir / f"raw-{day.isoformat()}.tar"
-        with tarfile.open(tar, "w") as t:   # 원본은 이미 gzip이라 다시 압축하지 않는다
-            t.add(raw_day, arcname=raw_day.name)
-        out["raw"] = tar.name
+    # 그날 원본 + 직전 거래일 원본 (KRX 전날 시세·아침 재시도 수급은 다음 날 아침에 전날 폴더로 들어온다 —
+    # 전날 백업에는 안 들어가 있으므로 오늘 다시 묶는다)
+    from ..timeutil import prev_trading_day
+    names = []
+    for d in (prev_trading_day(day), day):
+        raw_day = ctx.store.raw_dir / d.isoformat()
+        if raw_day.exists():
+            tar = bdir / f"raw-{d.isoformat()}.tar"
+            with tarfile.open(tar, "w") as t:   # 원본은 이미 gzip이라 다시 압축하지 않는다
+                t.add(raw_day, arcname=raw_day.name)
+            names.append(tar.name)
+    if names:
+        out["raw"] = ", ".join(names)
     cutoff = day - dt.timedelta(days=KEEP_DAYS)
     for p in bdir.iterdir():
         m = _STAMP.search(p.name)

@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..clients.base import ApiError, NotConfigured
 from ..clients.kis import to_int
+from ..redact import redact
 from ..timeutil import last_trading_day, now_kst, prev_trading_day, trading_days_back
 from .common import Ctx
 
@@ -24,9 +25,9 @@ def run(ctx: Ctx) -> list[tuple[str, str, str]]:
         except NotConfigured as e:
             out.append((name, "skip", e.message))
         except ApiError as e:
-            out.append((name, "fail", str(e)))
+            out.append((name, "fail", redact(e)))
         except Exception as e:  # noqa: BLE001
-            out.append((name, "fail", f"{type(e).__name__}: {e}"))
+            out.append((name, "fail", redact(f"{type(e).__name__}: {e}")))
 
     check("한국투자증권 토큰·시세", ctx.kis.test)
     check("종목 마스터 파일", lambda: f"코스피 {len(ctx.kis.download_master('KOSPI')):,}바이트")

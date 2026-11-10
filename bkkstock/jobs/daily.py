@@ -18,7 +18,7 @@ from ..clients.krx import INDEX_COLS, TRADE_COLS
 from ..clients.kis import to_float, to_int
 from ..master import extract_mst, parse_master, stocks_only
 from ..store import normalize_code
-from ..timeutil import is_trading_day, iso_kst, now_kst, prev_trading_day
+from ..timeutil import is_trading_day, iso_kst, now_kst, prev_trading_day, trading_days_back
 from .common import Ctx, Steps, job_lock, log, send_pending_alerts
 
 def short_code(v) -> str:
@@ -36,11 +36,22 @@ RECOVERABLE = {
 }
 
 
+def _retry(fn, waits=(30, 120)):
+    import time
+    for w in (*waits, None):
+        try:
+            return fn()
+        except ApiError:
+            if w is None:
+                raise
+            time.sleep(w)
+
+
 # ---------------- 개별 항목 ----------------
 def collect_universe(ctx: Ctx, day: dt.date):
     frames = []
     for market in ("KOSPI", "KOSDAQ"):
-        z = ctx.kis.download_master(market)
+        z = _retry(lambda m=market: ctx.kis.download_master(m), waits=(30, 120))   # 복구 불가 1순위 — 그날 꼭 받는다
         ctx.store.write_raw_bytes(day, f"kis_master_{market.lower()}", z, ".zip")
         frames.append(parse_master(extract_mst(z), market))
     df = pd.concat(frames, ignore_index=True)
@@ -50,18 +61,30 @@ def collect_universe(ctx: Ctx, day: dt.date):
     return len(st), f"주권 {len(st):,}종목 (전체 {len(df):,}) · 정지·관리·경보 {flagged}종목"
 
 
+KRX_REQUIRED = ("ISU_CD", "TDD_CLSPRC", "ACC_TRDVAL", "FLUC_RT")   # 없으면 점수·경주마 판정이 조용히 망가지는 열
+
+
 def collect_krx_prices(ctx: Ctx, day: dt.date):
-    frames = []
+    frames, empty = [], []
     for market in ("KOSPI", "KOSDAQ"):
         rows = ctx.krx.daily_trades(market, day)
         ctx.store.write_raw(day, f"krx_trades_{market.lower()}", rows)
         if rows:
+            missing = [c for c in KRX_REQUIRED if c not in rows[0]]
+            if missing:   # 응답 필드 이름이 바뀌면 '전 종목 중립·경주마 사라짐'이 조용히 생긴다 → 실패로 (원본은 저장됨)
+                raise ApiError("krx", "schema", f"{market} 응답에 필수 열이 없습니다: {', '.join(missing)}")
             df = pd.DataFrame(rows).rename(columns=TRADE_COLS)
             df["market"] = market
             frames.append(df)
-    if not frames:
-        return 0, "KRX 일별매매정보 비어 있음 (아직 갱신 전일 수 있음, 내일 아침 자동 재시도)"
+        else:
+            empty.append(market)
+    if not frames or empty:
+        # 한 시장만 오면 그날 시세가 반쪽이 된다 → 둘 다 올 때까지 '대기'(아침에 다시 받음)
+        return 0, ("KRX 일별매매정보 비어 있음" if not frames else f"{', '.join(empty)} 비어 있음") + " (아직 갱신 전일 수 있음)"
     df = pd.concat(frames, ignore_index=True)
+    close = pd.to_numeric(df["close"].astype(str).str.replace(",", ""), errors="coerce")
+    if close.isna().mean() > 0.05:
+        raise ApiError("krx", "schema", f"종가가 빈 종목이 {close.isna().mean():.0%}입니다 (응답 형식 확인 필요)")
     df["code"] = df["code"].map(short_code)
     if "date" not in df.columns:
         df["date"] = day.strftime("%Y%m%d")
@@ -70,7 +93,7 @@ def collect_krx_prices(ctx: Ctx, day: dt.date):
 
 
 def collect_krx_index(ctx: Ctx, day: dt.date):
-    frames = []
+    frames, empty = [], []
     for fam in ("KOSPI", "KOSDAQ"):
         rows = ctx.krx.index_daily(fam, day)
         ctx.store.write_raw(day, f"krx_index_{fam.lower()}", rows)
@@ -78,8 +101,10 @@ def collect_krx_index(ctx: Ctx, day: dt.date):
             df = pd.DataFrame(rows).rename(columns=INDEX_COLS)
             df["family"] = fam
             frames.append(df)
-    if not frames:
-        return 0, "지수 비어 있음"
+        else:
+            empty.append(fam)
+    if not frames or empty:
+        return 0, "지수 비어 있음" if not frames else f"{', '.join(empty)} 지수 비어 있음"
     df = pd.concat(frames, ignore_index=True)
     ctx.store.write_clean("index", day, df)
     return len(df), f"지수 {len(df)}개"
@@ -100,8 +125,19 @@ def collect_nxt_prices(ctx: Ctx, day: dt.date):
     codes = _universe_codes(ctx, day)
     prev_day = ctx.store.latest_clean_day("nxt_universe")
     prev = ctx.store.read_clean("nxt_universe", prev_day) if prev_day and prev_day < day else None
-    full = prev is None or day.weekday() == 0
-    targets = codes if full else sorted(set(prev["code"].astype(str)) & set(codes))
+    # 마지막 '전 종목' 조회 목록도 합친다 — 하루 거래가 0이었거나 오류 난 종목이 그 주 내내 빠지지 않게
+    last_full, last_full_day = None, None
+    for d in reversed([x for x in ctx.store.clean_days("nxt_universe") if x < day][-10:]):
+        u = ctx.store.read_clean("nxt_universe", d)
+        if u is not None and "scan" in u.columns and (u["scan"] == "full").any():
+            last_full, last_full_day = u, d
+            break
+    stale = last_full_day is None or len([x for x in trading_days_back(day, 6) if last_full_day < x < day]) >= 5
+    full = prev is None or day.weekday() == 0 or stale
+    base = set(prev["code"].astype(str)) if prev is not None else set()
+    if last_full is not None:
+        base |= set(last_full["code"].astype(str))
+    targets = codes if full else sorted(base & set(codes))
     rows, errors, err_samples = [], 0, []
     for code in targets:
         try:
@@ -133,6 +169,9 @@ def collect_investor(ctx: Ctx, day: dt.date):
     codes = _universe_codes(ctx, day) if ctx.settings.investor_scope == "all" else ctx.store.watch_codes()
     rows, errors, err_samples = [], 0, []
     want = day.strftime("%Y%m%d")
+    have = set(ctx.store.clean_days("investor"))
+    fill_days = {d.strftime("%Y%m%d") for d in trading_days_back(day, 20)[:-1] if d not in have}
+    fill_rows: dict[str, list] = {}
     for code in codes:
         try:
             out = ctx.kis.investor_daily(code, day, market="UN")
@@ -144,12 +183,20 @@ def collect_investor(ctx: Ctx, day: dt.date):
                 raise
             continue
         for r in out:
-            if r.get("stck_bsop_date") == want:
+            d = r.get("stck_bsop_date")
+            if d == want:
                 rows.append(dict(r, code=code, date=want))
-                break
+            elif d in fill_days:
+                fill_rows.setdefault(d, []).append(dict(r, code=code, date=d))
     ctx.store.write_raw(day, "kis_investor_un", rows)
     if rows:
         ctx.store.write_clean("investor", day, pd.DataFrame(rows))
+    # 응답에 지난 30일치가 같이 온다 — 최근 20거래일 중 수급 파일이 없는 날은 호출 없이 여기서 채운다
+    for d, rr in fill_rows.items():
+        if len(rr) >= max(1, len(codes) // 2):
+            dd = dt.date(int(d[:4]), int(d[4:6]), int(d[6:]))
+            ctx.store.write_raw(dd, "kis_investor_un_fill", rr)
+            ctx.store.write_clean("investor", dd, pd.DataFrame(rr))
     msg = f"투자자별 매매(통합) {len(rows):,}종목 / {len(codes):,}"
     if errors:
         msg += f" · 오류 {errors}건 {', '.join(err_samples)}"
@@ -230,10 +277,13 @@ def collect_watch_short_credit(ctx: Ctx, day: dt.date):
         ctx.store.write_clean("short", day, pd.DataFrame(short_rows))
     if credit_rows:
         ctx.store.write_clean("credit", day, pd.DataFrame(credit_rows))
-    return len(codes), f"관심 {len(codes)}종목 공매도 {len(short_rows)} · 신용 {len(credit_rows)}"
+    # 받은 행 수로 판정한다 (관심 종목 수가 아니라). 신용잔고는 공표가 늦어 그날 0건일 수 있다.
+    return len(short_rows), f"관심 {len(codes)}종목 공매도 {len(short_rows)} · 신용 {len(credit_rows)}"
 
 
 def compute_outlook(ctx: Ctx, day: dt.date):
+    from ..clients.dart import CLASSIFY_VERSION, classify
+    ctx.store.retag_disclosures(classify, CLASSIFY_VERSION)      # 분류 규칙이 바뀐 뒤 첫 계산이면 다시 매김
     if ctx.store.read_clean("prices_krx", day) is None:
         return 0, f"{day} KRX 시세가 아직 없어 점수는 시세를 받은 뒤 계산"
     df = outlook.compute(ctx.store, day)
@@ -293,15 +343,39 @@ def run(ctx: Ctx, day: dt.date | None = None, force: bool = False, only: list[st
         return {"status": status, "run_id": rid, "items": steps.summary()}
 
 
+CATCH_UP_DAYS = 10                     # 최근 10거래일까지 훑는다 (아침 두 번을 다 놓친 날도 다시 받게)
+CHEAP_ITEMS = {"krx_prices", "krx_index", "outlook", "disclosures"}   # 하루 몇 번 호출이면 되는 것
+
+
 def catch_up(ctx: Ctx, day: dt.date | None = None) -> dict:
-    """전 거래일 수집에서 실패한 '복구 가능' 항목만 다시 받는다 (아침 작업에서 호출)."""
+    """복구 가능 항목 중 실패·대기·경고·기록 없음인 것을 다시 받는다 (아침 작업에서 호출).
+    직전 거래일은 모든 복구 가능 항목, 그 전 9거래일은 호출이 싼 항목(KRX 시세·지수·점수·공시)만.
+    수급(종목마다 1회 호출, 하루 2천여 회)은 직전 거래일만 — 빠진 날은 매일 오는 응답의 지난 행으로 채운다."""
     day = day or prev_trading_day(now_kst().date())
-    latest = ctx.store.latest_item_status("daily", day)
-    if not latest:
-        return run(ctx, day, force=True, only=[n for n, r in RECOVERABLE.items() if r])
-    retry = [n for n, ok in RECOVERABLE.items() if ok and latest.get(n) in ("fail", "pending", None)]
-    if not retry:
+    days = trading_days_back(day, CATCH_UP_DAYS)
+    out: dict = {}
+    first_run = ctx.store.last_run("daily") is None
+    for d in reversed(days):
+        latest = ctx.store.latest_item_status("daily", d)
+        if not latest:
+            if d != day and (first_run or d < _first_daily_day(ctx)):
+                continue                      # 설치 전 날짜는 백필이 맡는다
+            items = [n for n, r in RECOVERABLE.items() if r and (d == day or n in CHEAP_ITEMS)]
+        else:
+            items = [n for n, ok in RECOVERABLE.items() if ok and latest.get(n) in ("fail", "pending", "warn", None)
+                     and (d == day or n in CHEAP_ITEMS)]
+        if not items:
+            continue
+        if "krx_prices" in items and "outlook" not in items:
+            items.append("outlook")
+        out[d.isoformat()] = run(ctx, d, force=True, only=items)
+    if not out:
         return {"status": "nothing"}
-    if "krx_prices" in retry and "outlook" not in retry:
-        retry.append("outlook")
-    return run(ctx, day, force=True, only=retry)
+    sts = {v.get("status") for v in out.values()}
+    status = "ok" if sts <= {"ok"} else "pending" if sts <= {"pending", "ok"} else "partial"
+    return {"status": status, "days": out}
+
+
+def _first_daily_day(ctx: Ctx) -> dt.date:
+    rows = ctx.store.query("SELECT MIN(day) AS d FROM job_runs WHERE job='daily'")
+    return dt.date.fromisoformat(rows[0]["d"]) if rows and rows[0]["d"] else now_kst().date()

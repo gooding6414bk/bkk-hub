@@ -41,7 +41,7 @@
 | 투자자 매매 백필 | 두 번째 `backfill --days 90` 을 주인이 돌림. **관심 종목을 보드에 넣기 전이면 다시 "건너뜀"** — 관심 종목 등록 뒤 한 번 더 |
 | first-week-check | KRX 필드 ❌ 는 밤에 오늘 날짜로 물어 생긴 거짓 실패였고 417bb9f 에서 고침. 배포 뒤 다시 돌려 볼 것 |
 
-알려진 테스트 문제: `tests/test_web.py::test_healthz_has_no_secrets` 는 거래일 22시(KST) 이후 돌리면 실패한다(`watchdog.health` 가 그날 daily 기록을 요구). 417bb9f 이전부터 그렇다. `deploy/update.sh` 는 테스트를 돌리지 않아 배포는 막지 않는다.
+(해결됨, 11-10) healthz 테스트는 시각을 고정하고, 무작위로 실패하던 `conftest.make_prices`의 `hash()`도 고정값으로 바꿨다. 이제 `deploy/update.sh`가 새 커밋을 임시 worktree에서 pytest로 시험한 뒤에만 배포한다 — 테스트가 깨지면 배포되지 않는다. 내부 점검 결과는 `docs/review-2026-11.md`.
 
 ## 3. 🎬 영상(기발해) 쪽 상태
 

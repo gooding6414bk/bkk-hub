@@ -66,7 +66,7 @@ class NewsClient:
             title = html.unescape(_TAG.sub("", it.get("title", "")))
             out.append({
                 "title": title,
-                "link": it.get("originallink") or it.get("link"),
+                "link": _safe_link(it.get("originallink") or it.get("link")),
                 "published": _rfc822(it.get("pubDate")),
                 "source": urllib.parse.urlparse(it.get("originallink") or "").netloc,
                 "tone": tone(title),
@@ -92,7 +92,7 @@ class NewsClient:
             src = item.find("source")
             out.append({
                 "title": title,
-                "link": item.findtext("link"),
+                "link": _safe_link(item.findtext("link")),
                 "published": _rfc822(item.findtext("pubDate")),
                 "source": src.text if src is not None else "",
                 "tone": tone(title),
@@ -104,6 +104,12 @@ class NewsClient:
     def test(self) -> str:
         items = self.search("삼성전자", 3)
         return f"{'네이버' if self.source == 'naver' else '구글 뉴스 RSS'} 응답 {len(items)}건"
+
+
+def _safe_link(u: str | None) -> str:
+    """http(s) 주소만 링크로 쓴다 (javascript: 같은 주소가 섞여 들어와도 화면에서 실행되지 않게)."""
+    u = (u or "").strip()
+    return u if urllib.parse.urlsplit(u).scheme in ("http", "https") else ""
 
 
 def _rfc822(s: str | None) -> str:

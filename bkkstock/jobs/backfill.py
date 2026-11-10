@@ -40,6 +40,7 @@ def run(ctx: Ctx, days: int = 90, end: dt.date | None = None, with_outlook: bool
                 out["errors"].append(f"{d}: {e}")
                 if len(out["errors"]) > 10:
                     break
+        out["disclosures"] = backfill_disclosures(ctx, end)
         out["investor_watch"] = backfill_watch_investor(ctx, end)
         out["short_credit_watch"] = backfill_watch_short_credit(ctx, end)
         try:
@@ -58,6 +59,37 @@ def run(ctx: Ctx, days: int = 90, end: dt.date | None = None, with_outlook: bool
                     n_out += 1
             out["outlook_days"] = n_out
     return out
+
+
+DISC_BACKFILL_DAYS = 130     # 부실 120일 창 + 여유. 설치 전 공시가 없으면 회피 엔진이 몇 달 동안 비어 있다.
+
+
+def backfill_disclosures(ctx: Ctx, end: dt.date, days: int = DISC_BACKFILL_DAYS) -> str:
+    """최근 130일 공시 목록을 하루씩(코스피 Y·코스닥 K 따로) 받아 채운다. 알림은 보내지 않는다.
+    처음 본 시각은 실제로 받은 시각이라 접수일보다 늦다 → 화면은 '백필'로 보고 시각 분석에서 뺀다.
+    이미 공시가 저장된 날은 건너뛴다. 호출 수는 대략 400~600회 (DART 하루 한도 안)."""
+    from .daily import upsert_disclosures
+    if not ctx.settings.has("DART_API_KEY"):
+        return "건너뜀 (DART 키 없음)"
+    have = {r["rcept_dt"] for r in ctx.store.query("SELECT DISTINCT rcept_dt FROM disclosures")}
+    n_days = n_items = 0
+    d = end
+    stop = end - dt.timedelta(days=days)
+    while d > stop:
+        if d.weekday() < 5 and d.strftime("%Y%m%d") not in have:
+            items = []
+            for cls in ("Y", "K"):
+                try:
+                    items += ctx.dart.list_all(d, d, corp_cls=cls)
+                except ApiError as e:
+                    return f"{n_days}일 {n_items}건 채움 · 중단: {e}"
+            if items:
+                ctx.store.write_raw(d, "dart_list_backfill", items)
+                n_items += len(upsert_disclosures(ctx, items, d))
+                n_days += 1
+        d -= dt.timedelta(days=1)
+    ctx.store.meta_set("disc_backfill", f"{end.isoformat()}:{days}")
+    return f"{n_days}일 {n_items}건 채움"
 
 
 def backfill_watch_investor(ctx: Ctx, end: dt.date) -> str:

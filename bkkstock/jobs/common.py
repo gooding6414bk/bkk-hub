@@ -16,6 +16,7 @@ from ..clients.news import NewsClient
 from ..clients.overseas import OverseasClient
 from ..clients.telegram import Telegram
 from ..config import Settings, get_settings
+from ..redact import redact
 from ..store import Store
 
 log = logging.getLogger("bkkstock")
@@ -103,15 +104,16 @@ class Steps:
         except Exception as e:  # noqa: BLE001 — 한 항목 실패가 나머지를 막지 않게
             log.exception("step %s failed", item)
             count, status, message = None, "fail", f"{type(e).__name__}: {e} | {traceback.format_exc(limit=2)[-300:]}"
-        res = StepResult(item, status, count, recoverable, message)
+        res = StepResult(item, status, count, recoverable, redact(message))
         self.results.append(res)
-        self.store.item(self.run_id, item, status, count, recoverable, message)
+        self.store.item(self.run_id, item, status, count, recoverable, res.message)
         return res
 
     def overall(self) -> str:
         sts = [r.status for r in self.results if r.status not in ("skip", "pending")]
         if not sts:
-            return "fail"
+            # 아직 안 올라온 것뿐이면 실패가 아니라 '대기' (아침마다 빨간 '실패'가 뜨던 문제)
+            return "pending" if any(r.status == "pending" for r in self.results) else "fail"
         if all(s == "ok" for s in sts):
             return "ok"
         if all(s == "fail" for s in sts):
@@ -123,18 +125,46 @@ class Steps:
                 for r in self.results}
 
 
+ALERT_MAX_AGE_H = 24
+
+
 def send_pending_alerts(ctx: Ctx) -> int:
+    """미발송 알림을 보낸다. 하루 넘게 묵은 것은 하나씩 보내지 않고 '밀린 알림 N건' 한 줄로 요약한다
+    (텔레그램을 나중에 켜는 날 몇 주 치가 한꺼번에 쏟아져 진짜 위험을 놓치지 않게)."""
     if not ctx.tg.configured:
         return 0
     n = 0
+    now = dt.datetime.now(dt.timezone.utc)
+    old, fresh = [], []
+    own = {w["code"] for w in ctx.store.watchlist() if w.get("kind") == "보유"}
     for a in ctx.store.unsent_alerts():
         try:
+            age = now - dt.datetime.fromisoformat(a["created_at"])
+        except (TypeError, ValueError):
+            age = dt.timedelta(0)
+        limit = 72 if (a.get("code") in own and a.get("kind") in ("공시", "위험")) else ALERT_MAX_AGE_H   # 보유 종목 위험은 3일까지 개별로
+        (old if age > dt.timedelta(hours=limit) else fresh).append(a)
+    try:
+        if old:
+            kinds = ", ".join(f"{k} {v}" for k, v in sorted(_count(a["kind"] for a in old).items()))
+            ctx.tg.send(f"📦 밀린 알림 {len(old)}건 ({kinds}) — 하루 넘게 지난 것이라 보드 대시보드에서 확인하세요.")
+            for a in old:
+                ctx.store.mark_sent(a["id"])
+            n += 1
+        for a in fresh:
             ctx.tg.send(a["message"])
             ctx.store.mark_sent(a["id"])
             n += 1
-        except ApiError:
-            break
+    except ApiError:
+        pass
     return n
+
+
+def _count(it) -> dict:
+    out: dict = {}
+    for k in it:
+        out[k] = out.get(k, 0) + 1
+    return out
 
 
 def day_or_today(day: dt.date | None) -> dt.date:

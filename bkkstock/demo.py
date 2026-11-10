@@ -69,8 +69,9 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
         common = np.random.normal(0, 1)
         for sym in lv:
             r = vol[sym] * (0.7 * common + 0.7 * np.random.normal(0, 1)) * (-0.4 if sym == "KRW=X" else 1)
+            op = lv[sym]                     # 가상 자료: 미국장 움직임은 시가→종가에 다 들어 있다
             lv[sym] *= 1 + r
-            us.setdefault(sym, []).append({"symbol": sym, "date": d.isoformat(), "open": lv[sym], "close": lv[sym]})
+            us.setdefault(sym, []).append({"symbol": sym, "date": d.isoformat(), "open": op, "close": lv[sym]})
             if sym == "EWY":
                 ewy_r[d] = r
     store.write_clean("overseas", tdays[-1], pd.DataFrame([r for rows in us.values() for r in rows]))
@@ -81,7 +82,8 @@ def seed(days: int = 70, n: int = 320, seed_: int = 7) -> str:
         prev_d = tdays[di - 1] if di else d - dt.timedelta(days=1)
         win = [r for ud, r in ewy_r.items() if prev_d <= ud < d]
         ewy_win = float(np.prod([1 + r for r in win]) - 1) if win else 0.0
-        gap = beta * ewy_win + 0.4 * prev_nxt_after + np.random.normal(0, 0.004, n)
+        # 잡음은 실제 수준(갭 표준편차 1~2%)으로 — 너무 작으면 샘플 성적표가 실제보다 훨씬 좋아 보인다
+        gap = beta * ewy_win + 0.4 * prev_nxt_after + np.random.normal(0, 0.012, n)
         opens = prev_close * (1 + gap)
         intraday = np.random.normal(0.0002, vol_scale * 0.8)
         rets = (opens * (1 + intraday)) / prev_close - 1

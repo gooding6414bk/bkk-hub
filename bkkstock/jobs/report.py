@@ -58,6 +58,7 @@ def build_message(ctx: Ctx, day: dt.date) -> str:
 def run(ctx: Ctx, day: dt.date | None = None) -> dict:
     day = day or now_kst().date()
     out: dict = {}
+    out["backup"] = backup.run(ctx, day)          # 백업을 먼저 — 알림 쪽 오류가 백업을 막지 않게
     if is_trading_day(day):
         msg = build_message(ctx, day)
         out["message"] = msg
@@ -67,6 +68,8 @@ def run(ctx: Ctx, day: dt.date | None = None) -> dict:
                 out["sent"] = True
             except Exception as e:  # noqa: BLE001
                 out["sent"] = str(e)
-    out["alerts"] = send_pending_alerts(ctx)
-    out["backup"] = backup.run(ctx, day)
+    try:
+        out["alerts"] = send_pending_alerts(ctx)
+    except Exception as e:  # noqa: BLE001
+        out["alerts"] = f"{type(e).__name__}"
     return out

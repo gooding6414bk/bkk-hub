@@ -12,7 +12,8 @@ import pandas as pd
 
 MAIN = [("외국인", "frgn"), ("기관", "orgn"), ("개인", "prsn")]
 INST = [("금융투자", "scrt"), ("투신", "ivtr"), ("사모", "pe_fund"), ("연기금", "fund"), ("보험", "insu"),
-        ("은행", "bank"), ("기타금융", "mrbn"), ("기타법인", "etc_corp")]
+        ("은행", "bank"), ("종금", "mrbn")]          # 기관계의 세부 (KIS: mrbn = 종금)
+OTHER = [("기타법인", "etc_corp")]                      # 기관계와 별개 — 기관 아래에 두지 않는다
 PERIODS = [1, 5, 20, 60]
 
 
@@ -64,7 +65,7 @@ def breakdown(inv: pd.DataFrame, prices: pd.DataFrame | None = None) -> dict | N
         closes = inv["date"].map(px["close"]) if "close" in px else None
     f = unit_factor(inv, closes)
     series = {}
-    for name, p in MAIN + INST:
+    for name, p in MAIN + INST + OTHER:
         a = _pick(inv, _amount_col(p))
         if a is not None:
             series[name] = (a.fillna(0) * f).tolist()
@@ -105,7 +106,8 @@ def breakdown(inv: pd.DataFrame, prices: pd.DataFrame | None = None) -> dict | N
         streak[name] = k * sign      # +5: 5일 연속 순매수, −3: 3일 연속 순매도
     cum = {name: pd.Series(series[name]).cumsum().tolist() for name in ("외국인", "기관", "개인") if name in series}
     return {"periods": periods, "streak": streak, "cum": cum, "dates": [str(d) for d in inv["date"]],
-            "days": n, "unit_factor": f, "inst_names": [nm for nm, _ in INST if nm in series]}
+            "days": n, "unit_factor": f, "inst_names": [nm for nm, _ in INST if nm in series],
+            "other_names": [nm for nm, _ in OTHER if nm in series]}
 
 
 def short_credit(short: pd.DataFrame | None, credit: pd.DataFrame | None) -> dict:

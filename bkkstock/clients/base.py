@@ -5,11 +5,14 @@ import time
 
 import httpx
 
+from ..redact import redact
+
 USER_AGENT = "bkk-stock/0.1 (+personal data collector)"
 
 
 class ApiError(Exception):
     def __init__(self, api: str, code: str, message: str, retryable: bool = False):
+        message = redact(message)   # 연결 오류 문구에 키가 실린 주소가 섞여도 화면·기록에 남지 않게
         super().__init__(f"[{api}] {code}: {message}")
         self.api = api
         self.code = code

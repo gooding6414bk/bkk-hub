@@ -1,99 +1,79 @@
 {% extends "base.html" %}{% import "_m.html" as m %}
 {% block title %}{{ s.name or s.code }}{% endblock %}
-{% macro eok(v) -%}{%- if v is none -%}–{%- else -%}<span class="{{ 'up' if v > 0 else 'down' if v < 0 else '' }}">{{ '%+.1f' % (v / 1e8) }}억</span>{%- endif -%}{%- endmacro %}
-{% macro pc(v, nd=2) -%}{%- if v is none -%}<span class="muted">–</span>{%- else -%}<span class="{{ 'up' if v > 0 else 'down' if v < 0 else '' }}">{{ ('%+.' ~ nd ~ 'f') % v }}%</span>{%- endif -%}{%- endmacro %}
+{% macro eok(v) -%}{%- if v is none -%}–{%- elif (v / 1e8) | abs < 0.05 -%}<span class="flat">0</span>{%- else -%}<span class="{{ 'up' if v > 0 else 'down' }}">{{ '%+.1f' % (v / 1e8) }}억</span>{%- endif -%}{%- endmacro %}
+{% macro pc(v, nd=2) -%}{%- if v is none -%}<span class="muted">–</span>{%- elif v | abs < 0.5 * 10 ** (-nd) -%}<span class="flat">0%</span>{%- else -%}<span class="{{ 'up' if v > 0 else 'down' }}">{{ ('%+.' ~ nd ~ 'f') % v }}%</span>{%- endif -%}{%- endmacro %}
 {% block content %}
+{#- 순서(2026-11 내부 점검): 머리(가격·매수 금지·위험) → 위험·점수 근거 → 차트 → 수급 → 뉴스 → 공시 → 내일 예측가(접힘).
+    회피 엔진이 핵심이고 예측가는 참고값이라 화면 무게도 그 순서로. -#}
 {% set o = s.o %}{% set fc = s.fc %}{% set st = s.stats %}
-<section class="card stock-head">
+<section class="card stock-head {{ 'row-block' if s.blocked }}">
   <div>
     <h1>{{ s.name or s.code }} <span class="muted">{{ s.code }}{% if s.market %} · {{ s.market }}{% endif %}</span></h1>
-    <p class="px">{% if s.px %}<b class="num">{{ s.px.close | num }}</b> {{ m.chg(s.px.change_pct) }} <span class="muted small">{{ s.px.date }} 종가 · 거래대금 {{ s.px.value | eok }}{% if s.px.nxt_share %} (NXT {{ '%.0f' % s.px.nxt_share }}%){% endif %}{% if s.px.mktcap %} · 시총 {{ s.px.mktcap | eok }}{% endif %}</span>{% else %}<span class="muted">시세 이력이 아직 없습니다.</span>{% endif %}</p>
+    <p class="px">{% if s.px %}<b class="num">{{ s.px.close | num }}</b> {{ m.chg(s.px.change_pct) }}
+      {% if s.chg_won is not none %}<span class="muted small">어제보다 {{ m.won(s.chg_won) }}</span>{% endif %}
+      <br><span class="muted small">{{ s.px.date }} 종가 · 거래대금 {{ s.px.value | eok }}{% if s.px.nxt_share %} (NXT {{ '%.0f' % s.px.nxt_share }}%){% endif %}{% if s.px.mktcap %} · 시총 {{ s.px.mktcap | eok }}{% endif %}</span>
+      {% else %}<span class="muted">시세 이력이 아직 없습니다.</span>{% endif %}</p>
   </div>
   <div class="head-right">
-    {% if o %}{{ m.grade(o.score, o.grade, o.arrow, o.blocked, o.enough_history) }}{% else %}{{ m.grade(none, '이력 부족', '·', False, False) }}{% endif %}
-    <p class="muted small">참고 점수 · 1~3개월 기울기 · 검증 전</p>
+    {% if o %}{{ m.grade(o.score, o.blocked, o.enough_history) }}{% else %}{{ m.grade(none, False, False) }}{% endif %}
     {% if s.watch %}<span class="tag {{ 'own' if s.watch.kind == '보유' }}">{{ s.watch.kind }} 중</span>
     {% else %}<button data-watch="{{ s.code }}" data-name="{{ s.name }}">관심 종목에 추가</button>{% endif %}
   </div>
+  {% for f in s.block_flags %}<p class="block-banner">⛔ <b>매수 금지 · {{ f.kind }}</b> — {{ f.text }}{% if s.watch and s.watch.kind == '보유' %} <span class="small">(보유 중이면 추가 매수 금지 · 보유분 점검)</span>{% endif %}</p>{% endfor %}
+  {% if s.warn_flags %}<p class="warn-row">{% for f in s.warn_flags %}{{ m.chip(f) }} {% endfor %}</p>{% endif %}
+  {% if s.risk_disc %}<p class="small">🚨 최근 위험 공시: <a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ s.risk_disc.rcept_no }}" target="_blank" rel="noopener">{{ s.risk_disc.report_nm }}</a> <span class="muted">{{ s.risk_disc.rcept_dt[4:6] }}/{{ s.risk_disc.rcept_dt[6:] }}</span></p>{% endif %}
+  {% if s.watch %}<p class="memo small">📝 {{ s.watch.memo or ('산 이유·언제 팔지를 주식 관리에서 메모해 두세요' if s.watch.kind == '보유' else '메모 없음') }}</p>{% endif %}
 </section>
 
 <section class="card">
-  <div class="card-head"><h2>🌙 내일 예측가 <span class="muted small">참고값</span></h2>
-    {% if fc %}<span class="muted small">{{ fc.base_day }} 종가 기준 → {{ fc.target }} ({{ '월화수목금토일'[fc.target.weekday()] }})</span>{% endif %}</div>
-  {% if fc %}
-  <div class="fc">
-    <div><span>예상 시초가</span><b class="num">{{ fc.center | num }}</b>{{ pc(fc.pred_gap * 100) }}</div>
-    <div><span>보통 범위 (68%)</span><b class="num">{{ fc.lo1 | num }} ~ {{ fc.hi1 | num }}</b><span>±{{ '%.1f' % (fc.sigma * 100) }}% (20일 변동성)</span></div>
-    <div><span>넓은 범위 (95%)</span><b class="num">{{ fc.lo2 | num }} ~ {{ fc.hi2 | num }}</b><span>±{{ '%.1f' % (fc.sigma * 200) }}%</span></div>
-  </div>
-  <div class="kv2">
-    <div><span>EWY 밤사이 (미국 상장 한국 ETF)</span>{% if fc.ewy is not none %}{{ pc(fc.ewy * 100) }}{% elif fc.us_pending %}<span class="muted">미국장 끝나기 전 · 아침 7:30 갱신</span>{% else %}<span class="muted">해외 시세 없음</span>{% endif %}</div>
-    <div><span>이 종목 민감도 β</span>{{ '%.2f' % fc.beta }} <span class="muted small">(전 종목 {{ '%.2f' % fc.beta_pool }}, 표본 {{ fc.beta_n }}일)</span></div>
-    <div><span>넥스트레이드 시간외</span>{{ pc(fc.nxt_after * 100) }} <span class="muted small">× 반영률 {{ '%.2f' % fc.gamma }}</span></div>
-    <div><span>필라델피아 반도체</span>{{ pc((fc.sox or 0) * 100) if fc.sox is not none else '–' }}</div>
-    <div><span>나스닥</span>{{ pc((fc.nasdaq or 0) * 100) if fc.nasdaq is not none else '–' }}</div>
-    <div><span>원/달러</span>{{ pc((fc.usdkrw or 0) * 100) if fc.usdkrw is not none else '–' }}</div>
-  </div>
-  {% set bt = fc.bt %}
-  {% if bt and bt.n %}
-  <p class="small"><b>성적표</b> 최근 {{ bt.n }}거래일을 그날 이전 자료로만 다시 계산:
-    방향 적중 {{ ('%.0f%%' % bt.hit) if bt.hit is not none else '–' }} ({{ bt.hit_n }}일) ·
-    시초가 오차 {{ '%.2f' % bt.mae_model }}% vs '어제 종가 그대로' {{ '%.2f' % bt.mae_base }}%
-    {% if bt.improve is not none %}(<span class="{{ 'up' if bt.improve > 0 else 'down' }}">{{ '%+.0f' % bt.improve }}%</span>){% endif %} ·
-    종가가 보통 범위 안 {{ ('%.0f%%' % bt.range_cover) if bt.range_cover is not none else '–' }} (목표 68%)</p>
-  {% else %}<p class="small muted">성적표를 내려면 해외 시세와 이 종목 시세가 15거래일 이상 더 쌓여야 합니다.</p>{% endif %}
-  <p class="caveat">예측이 아니라 '밤사이 바깥에서 일어난 일'을 이 종목의 과거 반응으로 환산한 참고값입니다. kospilab의 해외 참고가(해외 영구선물 × 환율)도 스스로 다음 날 시초가 예측이 아니라고 밝힙니다. 성적표가 '어제 종가 그대로'보다 나을 때만 의미가 있습니다. 모델 {{ s.fc_model }}</p>
-  {% else %}<p class="empty">시세 이력이 없어 계산할 수 없습니다.</p>{% endif %}
-</section>
-
-<section class="card">
-  <div class="card-head"><h2>차트 <span class="muted small">{{ st.days or 0 }}거래일</span></h2>
-    <div class="ma-legend"><span><i style="background:#f59e0b"></i>5일</span><span><i style="background:#8b5cf6"></i>20일</span><span><i style="background:#10b981"></i>60일 이동평균</span><span><i style="background:var(--c-vol)"></i>거래대금 KRX</span><span><i style="background:var(--c-nxt)"></i>NXT</span></div></div>
-  {{ s.chart | safe }}
-  {% if st %}
-  <div class="kv2">
-    <div><span>5일</span>{{ pc(st.ret5) }}</div><div><span>20일</span>{{ pc(st.ret20) }}</div><div><span>60일</span>{{ pc(st.ret60) }}</div>
-    <div><span>20일 변동성(일간)</span>{{ ('%.2f%%' % st.vol20) if st.vol20 is not none else '–' }}</div>
-    <div><span>기간 고점 대비</span>{{ pc(st.from_hi, 1) }}</div>
-    <div><span>거래대금 (20일 평균 대비)</span>{{ ('%.1f배' % st.value_x) if st.value_x else '–' }}</div>
-  </div>
-  {% endif %}
-</section>
-
-<div class="grid2">
-  <section class="card">
-    <div class="card-head"><h2>지수 대비 성과</h2><span class="muted small">처음 = 100</span></div>
-    {{ s.rel_chart | safe if s.rel_chart else '<p class="muted">지수 자료가 아직 없습니다.</p>' | safe }}
-  </section>
-  <section class="card">
-    <div class="card-head"><h2>점수 근거</h2></div>
+  <div class="card-head"><h2>위험 표시 · 점수 근거</h2><span class="muted small">참고 점수는 1개월 남짓 기울기 · 검증 전</span></div>
+  {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}">{% if f.level in ('block', 'warn') %}{{ m.chip(f) }}{% else %}<span class="chip info">ℹ {{ f.kind }}</span>{% endif %} {{ f.text }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted small">{{ '회피 엔진이 찾은 위험이 없습니다.' if o else '점수 계산 전이라 판정하지 못했습니다.' }}</p>{% endif %}
+  <details class="sub-fold"><summary>점수 근거 {% if o and o.enough_history %}<span class="muted small">{{ m.grade_name(o.score) }} {{ '%+.0f' % o.score }}</span>{% endif %}</summary>
     {% if o and o.enough_history %}
       <ul class="bars">
       {% for b in s.comps %}<li><span class="bl">{{ b.label }}</span><span class="bar"><i class="{{ 'neg' if b.neg else 'pos' }}" style="--w: {{ b.pct }}%"></i></span><b class="bv num">{{ '%+.1f' % b.value }}</b></li>{% endfor %}
       </ul>
     {% else %}<p class="empty">점수를 내려면 21거래일 이상 시세 이력이 필요합니다.</p>{% endif %}
-    <h3>위험 표시</h3>
-    {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}"><span class="chip {{ f.level }}">{{ f.kind }}</span> {{ f.text }}</li>{% endfor %}</ul>
-    {% else %}<p class="muted small">회피 엔진이 찾은 위험이 없습니다.</p>{% endif %}
-    {% if s.score_spark %}<h3>점수 흐름 <span class="muted small">{{ s.n_score_days }}일</span></h3>{{ s.score_spark | safe }}{% endif %}
-  </section>
-</div>
+    {% if s.score_spark %}<h3>점수 흐름 <span class="muted small">{{ s.n_score_days }}일 · 처음 {{ '%+.0f' % s.spark_first }} → 지금 {{ '%+.0f' % s.spark_last }}</span></h3>{{ s.score_spark | safe }}{% endif %}
+  </details>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>차트 <span class="muted small">{{ st.days or 0 }}거래일 · 수정주가</span></h2>
+    <div class="ma-legend"><span><i style="background:#f59e0b"></i>5일</span><span><i style="background:#8b5cf6"></i>20일</span><span><i style="background:#10b981"></i>60일 이동평균</span><span><i style="background:var(--c-vol)"></i>거래대금</span><span><i style="background:var(--c-nxt)"></i>NXT</span><span><i class="dotm"></i>재료 없는 급등</span></div></div>
+  <div class="chart-wrap">{{ s.chart | safe }}</div>
+  {% if st %}
+  <div class="kv2">
+    <div><span>5일</span>{{ pc(st.ret5) }}</div><div><span>20일</span>{{ pc(st.ret20) }}</div><div><span>60일</span>{{ pc(st.ret60) }}</div>
+    <div><span>하루 보통 움직임 (20일)</span>{{ ('±%.1f%%' % st.vol20) if st.vol20 is not none else '–' }}</div>
+    <div><span>기간 고점 대비</span>{{ pc(st.from_hi, 1) }}</div>
+    <div><span>거래대금 (20일 평균 대비)</span>{{ ('%.1f배' % st.value_x) if st.value_x else '–' }}</div>
+  </div>
+  {% endif %}
+  <details class="sub-fold"><summary>지수 대비 성과 <span class="muted small">처음 = 100</span></summary>
+    {{ s.rel_chart | safe if s.rel_chart else '<p class="muted">지수 자료가 아직 없습니다.</p>' | safe }}
+  </details>
+</section>
 
 <section class="card">
   <div class="card-head"><h2>수급</h2><span class="muted small">{% if s.flow %}KRX+NXT 통합 · {{ s.flow.days }}거래일 자료{% endif %}</span></div>
   {% if s.flow %}
   {% set fl = s.flow %}
-  <p class="streak">{% for who in ('외국인', '기관', '개인') %}{% set k = fl.streak.get(who, 0) %}{{ who }} {% if k > 0 %}<b class="up">{{ k }}일 연속 순매수</b>{% elif k < 0 %}<b class="down">{{ -k }}일 연속 순매도</b>{% else %}–{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <p class="streak">{% for who in ('외국인', '기관', '개인') %}{% set k = fl.streak.get(who, 0) %}{{ who }} {% if k > 0 %}<b>{{ k }}일 연속 순매수</b>{% elif k < 0 %}<b>{{ -k }}일 연속 순매도</b>{% else %}–{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
   <div class="tbl-wrap"><table class="tbl compact flow-tbl">
-    <thead><tr><th>주체</th>{% for p in fl.periods %}<th class="num">{{ p.days }}일 순매수</th><th class="num">거래대금 대비</th>{% endfor %}</tr></thead>
+    <thead><tr><th>주체</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일 순매수</th><th class="num p{{ p.days }} pv">거래대금 대비</th>{% endfor %}</tr></thead>
     <tbody>
-    {% for who in ('외국인', '기관', '개인') %}<tr><td><b>{{ who }}</b></td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num">{{ eok(g.net if g else none) }}</td><td class="num">{{ pc(g.pct_value if g else none, 1) }}</td>{% endfor %}</tr>{% endfor %}
-    {% for who in fl.inst_names %}<tr class="sub"><td>└ {{ who }}</td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num">{{ eok(g.net if g else none) }}</td><td class="num">{{ pc(g.pct_value if g else none, 1) }}</td>{% endfor %}</tr>{% endfor %}
+    {% for who in ['외국인', '기관', '개인'] + (fl.other_names or []) %}<tr><td><b>{{ who }}</b></td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td><td class="num p{{ p.days }} pv">{{ pc(g.pct_value if g else none, 1) }}</td>{% endfor %}</tr>{% endfor %}
     </tbody>
   </table></div>
+  <details class="sub-fold"><summary>기관 세부 <span class="muted small">{{ fl.inst_names | join(' · ') }}</span></summary>
+  <div class="tbl-wrap"><table class="tbl compact flow-tbl">
+    <thead><tr><th>기관</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일</th>{% endfor %}</tr></thead>
+    <tbody>{% for who in fl.inst_names %}<tr><td>{{ who }}</td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div></details>
   <p class="muted small">거래대금 대비 = 그 기간 순매수 ÷ 그 기간 전체 거래대금. 시가총액 대비 {% for p in fl.periods if p.days == 20 %}(20일): 외국인 {{ pc(p.groups['외국인'].pct_mktcap, 2) }}, 기관 {{ pc(p.groups['기관'].pct_mktcap, 2) }}{% endfor %}.</p>
-  <h3>누적 순매수 <span class="muted small">억 원</span></h3>
-  {{ s.flow_chart | safe }}
+  <details class="sub-fold"><summary>누적 순매수 그래프 <span class="muted small">억 원</span></summary>{{ s.flow_chart | safe }}</details>
   {% else %}<p class="empty">수급 자료가 아직 없습니다. 한국투자증권 키가 있으면 매일 저녁 쌓이고, 관심 종목은 '과거 데이터 채우기'로 30일치를 받습니다.</p>{% endif %}
   {% if s.sc %}
   <div class="kv2">
@@ -106,21 +86,51 @@
 <section class="card">
   <div class="card-head"><h2>뉴스</h2><button class="ghost" id="news-reload" data-code="{{ s.code }}">새로 받기</button></div>
   <div id="news" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
-  <p class="caveat">제목에 쓰인 금융 용어로 호재·악재를 나눕니다(근거 단어 표시). 같은 소식은 묶어서 셉니다. 뉴스는 대개 이미 가격에 반영돼 있어 참고 점수에는 넣지 않습니다.</p>
+  <p class="caveat">제목 단어로 호재·악재를 나눕니다(근거 단어 표시, 틀릴 수 있음). 같은 소식은 묶어서 셉니다. 뉴스는 대개 이미 가격에 반영돼 있어 참고 점수에는 넣지 않습니다.</p>
 </section>
 
 <section class="card">
   <div class="card-head"><h2>공시</h2><a class="pill" href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm={{ s.name | urlencode }}" target="_blank" rel="noopener">DART에서 보기</a></div>
   {% if s.disc_sum.n %}
-  <div class="ratio">{% for b in s.disc_bar %}<span class="{{ b.key }}" style="width: {{ b.pct }}%" title="{{ b.label }} {{ '%.0f' % b.pct }}%"></span>{% endfor %}</div>
-  <div class="ratio-legend">{% for b in s.disc_bar %}<span>{{ b.label }} {{ '%.0f' % b.pct }}%</span>{% endfor %}{% if s.disc_sum.tags %}<span>· {% for t, k in s.disc_sum.tags[:5] %}{{ t }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+  <p class="small">최근 공시 {{ s.disc_sum.n }}건 · {% for b in s.disc_bar %}{{ b.label }} {{ '%.0f' % b.pct }}%{% if not loop.last %} · {% endif %}{% endfor %}{% if s.disc_sum.tags %} · {% for t, k in s.disc_sum.tags[:5] %}{{ t }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</p>
   {% endif %}
   {% if s.discs %}<ul class="list">
     {% for x in s.discs %}<li>
       <a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ x.rcept_no }}" target="_blank" rel="noopener">{{ x.report_nm }}</a>
-      {% for t in x.tags.split(',') if t %}<span class="chip {{ 'block' if t == '부실' else 'warn' if t in ('희석', '매도압력', '소송') else 'good' if t in ('주주환원', '실적', '수주') else 'info' }}">{{ t }}</span>{% endfor %}
-      <div class="muted small">{{ x.rcept_dt[:4] }}-{{ x.rcept_dt[4:6] }}-{{ x.rcept_dt[6:] }} · 처음 본 시각 {{ x.first_seen_at | ts }}</div>
+      {% for t in x.tags.split(',') if t %}{% set lv = 'block' if t == '부실' else 'warn' if t in ('희석', '매도압력', '소송', '계약해지', '영업위험', '상폐우려') else 'good' if t in ('주주환원', '수주') else 'info' %}<span class="chip {{ lv }}">{{ '⛔ ' if lv == 'block' else '⚠ ' if lv == 'warn' else '' }}{{ t }}</span>{% endfor %}
+      <div class="muted small">{{ x.rcept_dt[:4] }}-{{ x.rcept_dt[4:6] }}-{{ x.rcept_dt[6:] }} · {% if x.backfill %}백필 (접수일만 앎){% else %}처음 본 시각 {{ x.first_seen_at | ts }}{% endif %}</div>
     </li>{% endfor %}
-  </ul>{% else %}<p class="empty">저장된 공시가 없습니다. 공시는 수집을 시작한 날부터 쌓입니다.</p>{% endif %}
+  </ul>{% else %}<p class="empty">저장된 공시가 없습니다.</p>{% endif %}
 </section>
+
+<details class="card fold" id="forecast">
+  <summary><b>🌙 내일 예측가</b> <span class="muted small">참고값 · 접어 둠{% if fc and s.fc_state == 'ok' %} · {{ fc.target.month }}/{{ fc.target.day }} 종가 보통 범위 {{ fc.lo1 | num }}~{{ fc.hi1 | num }}{% endif %}</span></summary>
+  {% if s.fc_state == 'none' %}<p class="empty">시세 이력이 없어 계산할 수 없습니다.</p>
+  {% elif s.fc_state == 'blocked' %}<p class="empty">매수 금지 종목이라 예측가를 보이지 않습니다.</p>
+  {% elif s.fc_state == 'stale' %}<p class="empty">{{ fc.target.month }}/{{ fc.target.day }} 장이 이미 시작돼 이 계산은 지난 것입니다. 다음 예측은 KRX 자료가 올라오는 아침(7:30·8:30)에 바뀝니다.</p>
+  {% else %}
+  <p class="small muted">{{ fc.base_day }} 종가 기준 → {{ fc.target }} ({{ '월화수목금토일'[fc.target.weekday()] }}){% if s.fc_state == 'thin' %} · <b>이 종목 자료가 적어 전 종목 평균값을 주로 씁니다</b>{% endif %}</p>
+  <div class="fc">
+    <div><span>{{ fc.target.month }}/{{ fc.target.day }} 종가 보통 범위 (10번 중 7번)</span><b class="num">{{ fc.lo1 | num }} ~ {{ fc.hi1 | num }}</b></div>
+    <div><span>넓은 범위 (20번 중 19번)</span><b class="num">{{ fc.lo2 | num }} ~ {{ fc.hi2 | num }}</b></div>
+    <div><span>밤사이를 반영한 시초가 참고값</span><b class="num small-b">{{ fc.center | num }}</b>{{ pc(fc.pred_gap * 100) }}</div>
+  </div>
+  {% set bt = fc.bt %}
+  {% if bt and bt.n %}
+  <p class="small"><b>성적표</b> 최근 {{ bt.n }}거래일을 그날 이전 자료로만 다시 계산:
+    시초가 오차 {{ '%.2f' % bt.mae_model }}% vs '어제 종가 그대로' {{ '%.2f' % bt.mae_base }}% →
+    <b>{{ {'better': '기준선보다 나음', 'worse': '기준선보다 못함', 'same': '기준선과 차이 없음'}.get(bt.verdict, '판단하기엔 표본이 적음') }}</b>
+    · 종가가 보통 범위 안 {{ ('%.0f%%' % bt.range_cover) if bt.range_cover is not none else '–' }} (68%에 가까울수록 범위가 맞음)</p>
+  {% else %}<p class="small muted">성적표를 내려면 해외 시세와 이 종목 시세가 15거래일 이상 더 쌓여야 합니다.</p>{% endif %}
+  <details class="sub-fold"><summary>계산 근거</summary>
+    <div class="kv2">
+      <div><span>EWY 미국장 (미국 상장 한국 ETF, 시가→종가)</span>{% if fc.ewy is not none %}{{ pc(fc.ewy * 100) }}{% elif fc.us_pending %}<span class="muted">미국장 끝나기 전 · 아침 7:30 갱신</span>{% else %}<span class="muted">해외 시세 없음</span>{% endif %}</div>
+      <div><span>이 종목이 EWY를 따라 움직이는 정도</span>약 {{ '%.1f' % fc.beta }}배 <span class="muted small">(전 종목 {{ '%.1f' % fc.beta_pool }}배, {{ fc.beta_n }}일 자료)</span></div>
+      <div><span>넥스트레이드 시간외 움직임</span>{% if fc.nxt_used %}{{ pc(fc.nxt_after * 100) }} <span class="muted small">× {{ '%.1f' % fc.gamma }}</span>{% else %}<span class="muted">아직 안 씀 (NXT 자료 {{ fc.nxt_days }}일 · 60일부터)</span>{% endif %}</div>
+      <div><span>필라델피아 반도체 · 나스닥 · 원/달러</span>{{ pc((fc.sox or 0) * 100) if fc.sox is not none else '–' }} · {{ pc((fc.nasdaq or 0) * 100) if fc.nasdaq is not none else '–' }} · {{ pc((fc.usdkrw or 0) * 100) if fc.usdkrw is not none else '–' }}</div>
+    </div>
+    <p class="caveat">예측이 아니라 '밤사이 바깥에서 일어난 일'을 이 종목의 과거 반응으로 환산한 참고값입니다. 범위는 시초가가 아니라 종가 범위입니다. 성적표가 '어제 종가 그대로'보다 나을 때만 의미가 있습니다. 모델 {{ s.fc_model }}</p>
+  </details>
+  {% endif %}
+</details>
 {% endblock %}

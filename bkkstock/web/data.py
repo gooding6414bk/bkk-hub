@@ -128,7 +128,6 @@ def watch_rows(ctx: Ctx) -> list[dict]:
             "enough": bool(o.get("enough_history")) if o else False,
             "ret20": o.get("ret20") if o else None, "flags": _flags(o),
             "last_disc": last_disc.get(w["code"]),
-            "fc": forecast_for(ctx, w["code"]),
             "value_now": close * w["qty"] if close and w.get("qty") else None,
             "pnl_today": (close * w["qty"] * (chg / (100 + chg))) if close and w.get("qty") and chg is not None else None,
         })
@@ -164,37 +163,52 @@ def market_overview(ctx: Ctx) -> dict | None:
         return None
 
 
-def check_items(ctx: Ctx, rows: list[dict]) -> list[str]:
-    """보유·관심 종목에서 오늘 볼 만한 것을 자동으로 고른다."""
-    out = []
-    day = ref_day(ctx)
-    inv = investor_history(ctx.store, day, 10) if day else pd.DataFrame()
-    since = (now_kst().date() - dt.timedelta(days=3)).strftime("%Y%m%d")
+RISK_DISC_TAGS = ("희석", "부실", "매도압력", "소송", "계약해지", "영업위험", "상폐우려")
+
+
+def risk_items(ctx: Ctx, rows: list[dict], limit: int = 12) -> dict:
+    """대시보드 맨 위 '오늘 내 종목에서 볼 것'. 위험한 것부터 정렬한 뒤 자른다 (예전에는 종목 순서대로 쌓아
+    12줄에서 잘라서 뒤쪽 보유 종목의 ⛔가 안 보일 수 있었다). 매수 신호처럼 읽히는 줄(연속 순매수 🟢,
+    밤사이 예상 시초가 🌙, 하루 +5% 📈)은 넣지 않는다."""
+    items: list[dict] = []
+    since7 = (now_kst().date() - dt.timedelta(days=7)).strftime("%Y%m%d")
+    since3 = (now_kst().date() - dt.timedelta(days=3)).strftime("%Y%m%d")
     for w in rows:
-        nm = w.get("name") or w["code"]
+        own = w.get("kind") == "보유"
+        base = {"code": w["code"], "name": w.get("name") or w["code"], "own": own}
         for f in w.get("flags") or []:
             if f["level"] == "block":
-                out.append(f"⛔ {nm}: {f['text']}")
-        if w.get("change_pct") is not None and abs(w["change_pct"]) >= 5:
-            out.append(f"{'📈' if w['change_pct'] > 0 else '📉'} {nm}: 하루 {w['change_pct']:+.1f}% 움직임")
-        if not inv.empty:
-            iv = inv[inv["code"] == w["code"]]
-            if len(iv):
-                br = flowmod.breakdown(iv)
-                st = (br or {}).get("streak", {})
-                for who in ("외국인", "기관"):
-                    k = st.get(who, 0)
-                    if abs(k) >= 4:
-                        out.append(f"{'🟢' if k > 0 else '🔴'} {nm}: {who} {abs(k)}일 연속 순{'매수' if k > 0 else '매도'}")
-        new = ctx.store.query("SELECT report_nm, tags FROM disclosures WHERE stock_code=? AND rcept_dt>=? ORDER BY rcept_dt DESC",
-                              (w["code"], since))
-        if new:
-            risky = [d for d in new if any(t in (d["tags"] or "") for t in ("희석", "부실", "매도압력", "소송"))]
-            out.append(f"📄 {nm}: 최근 3일 공시 {len(new)}건" + (f" (위험 분류 {len(risky)}건)" if risky else ""))
-        fc = w.get("fc")
-        if fc and fc.get("us_ready") and abs(fc.get("pred_gap") or 0) >= 0.01:
-            out.append(f"🌙 {nm}: 밤사이 해외 반영 예상 시초가 {fc['pred_gap'] * 100:+.1f}% (참고값)")
-    return out[:12]
+                items.append(dict(base, sev=0, icon="⛔", kind=f["kind"],
+                                  text=("추가 매수 금지 · 보유분 점검 — " if own else "") + f["text"]))
+            elif f["level"] == "warn":
+                items.append(dict(base, sev=2, icon="⚠", kind=f["kind"], text=f["text"]))
+        discs = ctx.store.query("SELECT rcept_no, report_nm, tags, rcept_dt FROM disclosures WHERE stock_code=? AND rcept_dt>=? "
+                                "ORDER BY rcept_dt DESC, rcept_no DESC", (w["code"], since7))
+        for d in discs:
+            tags = [t for t in (d["tags"] or "").split(",") if t]
+            risky = [t for t in tags if t in RISK_DISC_TAGS]
+            url = f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={d['rcept_no']}"
+            if risky:
+                items.append(dict(base, sev=1, icon="🚨", kind="/".join(risky), text=d["report_nm"], url=url,
+                                  when=f"{d['rcept_dt'][4:6]}/{d['rcept_dt'][6:]}"))
+            elif own and d["rcept_dt"] >= since3:
+                items.append(dict(base, sev=4, icon="📄", kind="공시", text=d["report_nm"], url=url,
+                                  when=f"{d['rcept_dt'][4:6]}/{d['rcept_dt'][6:]}"))
+        if own and w.get("change_pct") is not None and w["change_pct"] <= -5:
+            items.append(dict(base, sev=3, icon="📉", kind="큰 하락", text=f"하루 {w['change_pct']:+.1f}% — 손실 점검"))
+    items.sort(key=lambda x: (x["sev"], not x["own"]))
+    return {"rows": items[:limit], "more": max(0, len(items) - limit)}
+
+
+def data_state(ctx: Ctx, day: dt.date | None) -> dict:
+    """'자료 없음'과 '위험 없음'을 구분한다. 수집이 멈추면 '최근 n일 없음'이 '안심'으로 읽히면 안 된다."""
+    if day is None:
+        return {"state": "none", "text": "아직 시세 자료가 없습니다 (첫 수집 전) — 위험 판정을 할 수 없습니다."}
+    lag = len([d for d in trading_days_back(now_kst().date(), 8) if d > day])
+    # KRX는 그날 시세를 다음 영업일 아침에 올린다 → 평소 1~2거래일 늦은 것이 정상
+    if lag >= 3:
+        return {"state": "stale", "text": f"기준일 {day:%m/%d} — {lag}거래일 전 자료입니다. 수집이 멈췄는지 운영 탭을 확인하세요."}
+    return {"state": "ok", "text": f"기준일 {day:%m/%d}"}
 
 
 def dashboard(ctx: Ctx) -> dict:
@@ -230,8 +244,11 @@ def dashboard(ctx: Ctx) -> dict:
                   "pnl_today": sum(w["pnl_today"] for w in own if w.get("pnl_today") is not None)}
         cost = totals["value"] - totals["pnl"]
         totals["pnl_pct"] = totals["pnl"] / cost * 100 if cost else None
+    unsent = ctx.store.query("SELECT COUNT(*) AS n FROM alerts WHERE sent=0")[0]["n"]
+    issues = [it for it in items if it["status"] in ("fail", "warn")]
     return {
-        "market": market_overview(ctx), "totals": totals, "checks": check_items(ctx, watch),
+        "market": market_overview(ctx), "totals": totals, "risk": risk_items(ctx, watch),
+        "data": data_state(ctx, day), "alerts_off": not ctx.tg.configured, "unsent": unsent, "issues": issues,
         "day": day, "today": today, "trading_today": is_trading_day(today), "last_run": last, "item_status": items,
         "last_poll": polls[0] if polls else None, "watch": watch, "horses": horses[:15],
         "material": material[:10], "risky_disclosures": risky,
@@ -243,6 +260,28 @@ def dashboard(ctx: Ctx) -> dict:
     }
 
 
+def _outlook_mtime(ctx: Ctx) -> float:
+    try:
+        return os.path.getmtime(ctx.store.clean_dir / "outlook")
+    except OSError:
+        return 0.0
+
+
+@lru_cache(maxsize=1)      # 검증은 몇백 일치 시세를 읽는다 — 자료가 바뀔 때만 다시 계산
+def _verify_cached(data_dir: str, mtime: float, o_mtime: float):
+    from ..store import Store
+    return outlook.verify(Store(data_dir))
+
+
+@lru_cache(maxsize=1)
+def _avoid_cached(data_dir: str, mtime: float, o_mtime: float):
+    from ..store import Store
+    try:
+        return outlook.avoid_scorecard(Store(data_dir))
+    except Exception:  # noqa: BLE001
+        return {"status": "insufficient", "kinds": []}
+
+
 def _overseas_mtime(ctx: Ctx) -> float:
     try:
         return os.path.getmtime(ctx.store.clean_dir / "overseas")
@@ -250,17 +289,35 @@ def _overseas_mtime(ctx: Ctx) -> float:
         return 0.0
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=1)      # 전 종목 묶음이라 수백 MB — 하나만 들고 있는다 (웹 메모리 상한 900MB)
 def _fc_context(data_dir: str, day: str, mtime: float, ov_mtime: float):
     from ..store import Store
     return fcmod.build_context(Store(data_dir), dt.date.fromisoformat(day))
+
+
+def _malloc_trim() -> None:
+    """큰 표를 버린 뒤 메모리를 운영체제에 돌려준다 (glibc). 안 되는 환경이면 그냥 넘어간다."""
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_fc_key: dict = {"k": None}
 
 
 def fc_context(ctx: Ctx):
     day = ref_day(ctx)
     if not day:
         return None
-    return _fc_context(ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx))
+    key = (ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx))
+    if _fc_key["k"] != key:              # 새로 만들기 전에 옛 묶음을 먼저 버린다 (두 개가 동시에 메모리에 있지 않게)
+        _fc_context.cache_clear()
+        _forecast_cached.cache_clear()
+        _malloc_trim()
+        _fc_key["k"] = key
+    return _fc_context(*key)
 
 
 @lru_cache(maxsize=64)
@@ -274,6 +331,8 @@ def forecast_for(ctx: Ctx, code: str) -> dict | None:
     if not day:
         return None
     try:
+        if fc_context(ctx) is None:
+            return None
         return _forecast_cached(ctx.store.data_dir.as_posix(), day.isoformat(), _mtime(ctx), _overseas_mtime(ctx),
                                 code, now_kst().hour)
     except Exception:  # noqa: BLE001 — 예측가가 실패해도 화면은 뜬다
@@ -306,7 +365,7 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
         extra = _cached_compute(ctx.store.data_dir.as_posix(), day.isoformat(), (code,), _mtime(ctx))
         if extra is not None and not extra.empty:
             o = extra.iloc[0].to_dict()
-    hist = price_history(ctx.store, day, 120) if day else pd.DataFrame()
+    hist = price_history(ctx.store, day, 120, codes=[code]) if day else pd.DataFrame()
     h = hist[hist["code"] == code].sort_values("date") if not hist.empty else pd.DataFrame()
     chart = rel_chart = ""
     last_px = {}
@@ -350,7 +409,7 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
         stats["days"] = len(c_ser)
         v20 = h["total_value"].tail(20).mean() if "total_value" in h else None
         stats["value_x"] = float(h["total_value"].iloc[-1] / v20) if v20 else None
-    inv = investor_history(ctx.store, day, 60) if day else pd.DataFrame()
+    inv = investor_history(ctx.store, day, 60, codes=[code]) if day else pd.DataFrame()
     flow = None
     flow_chart = ""
     if not inv.empty:
@@ -365,19 +424,50 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
     disc_sum = newsread.disclosure_summary(discs)
     hist_scores = []
     for d in ctx.store.clean_days("outlook")[-40:]:
-        df = ctx.store.read_clean("outlook", d)
-        if df is not None and code in set(df["code"]):
-            hist_scores.append(float(df[df["code"] == code].iloc[0]["score"]))
+        df = ctx.store.read_clean("outlook", d, columns=["code", "score"], codes=[code])
+        if df is not None and len(df):
+            hist_scores.append(float(df.iloc[0]["score"]))
     comps = []
     if o:
         comps = charts.bars_pm([(outlook.EXPLAIN[k], float(o.get(k) or 0)) for k in
                                 ("reversal", "lottery", "lowvol", "flow", "flag_penalty")], 20)
     watch = {w["code"]: w for w in ctx.store.watchlist()}.get(code)
-    return {"code": code, "name": name, "day": day, "o": o, "flags": _flags(o), "chart": chart, "rel_chart": rel_chart,
+    flags = _flags(o)
+    blocked = bool(o and o.get("blocked"))
+    fc = forecast_for(ctx, code)
+    fc_state = "none" if not fc else "blocked" if blocked else "ok"
+    if fc and fc_state == "ok":
+        now = now_kst()
+        tgt = fc["target"]
+        # 예측 대상일 장이 이미 열렸으면(저녁에 보면 '이미 끝난 오늘 장') 숫자를 보이지 않는다
+        if now.date() > tgt or (now.date() == tgt and now.hour >= 9):
+            fc_state = "stale"
+        elif fc.get("beta_n", 0) < 15:
+            fc_state = "thin"
+    risk_disc = next((x for x in discs if any(t in (x.get("tags") or "") for t in RISK_DISC_TAGS)), None)
+    for x in discs:   # 설치 전 백필로 채운 공시는 '처음 본 시각'이 접수일보다 늦다 → 시각 분석에 쓰지 않는다
+        x["backfill"] = bool(x.get("first_seen_at") and x["first_seen_at"][:10].replace("-", "") > _next_day(x.get("rcept_dt")))
+    chg_won = None
+    if last_px.get("close") and last_px.get("change_pct") is not None:
+        c = last_px["close"]
+        chg_won = c - c / (1 + last_px["change_pct"] / 100)
+    return {"code": code, "name": name, "day": day, "o": o, "flags": flags, "blocked": blocked,
+            "block_flags": [f for f in flags if f["level"] == "block"], "warn_flags": [f for f in flags if f["level"] == "warn"],
+            "risk_disc": risk_disc, "fc_state": fc_state, "chg_won": chg_won,
+            "spark_first": hist_scores[0] if hist_scores else None, "spark_last": hist_scores[-1] if hist_scores else None,
+            "chart": chart, "rel_chart": rel_chart,
             "px": last_px, "stats": stats, "market": market, "flow": flow, "flow_chart": flow_chart, "sc": sc,
             "discs": discs[:25], "disc_sum": disc_sum, "disc_bar": charts.tone_bar(disc_sum["ratio"]),
             "score_spark": charts.sparkline(hist_scores, 160, 36), "n_score_days": len(hist_scores), "comps": comps,
-            "watch": watch, "model": outlook.MODEL_VERSION, "fc": forecast_for(ctx, code), "fc_model": fcmod.MODEL_VERSION}
+            "watch": watch, "model": outlook.MODEL_VERSION, "fc": fc, "fc_model": fcmod.MODEL_VERSION}
+
+
+def _next_day(ymd: str | None) -> str:
+    try:
+        d = dt.date(int(ymd[:4]), int(ymd[4:6]), int(ymd[6:8])) + dt.timedelta(days=1)
+        return d.strftime("%Y%m%d")
+    except (TypeError, ValueError):
+        return "99999999"
 
 
 def _short_credit(ctx: Ctx, day, code: str) -> dict:
@@ -404,8 +494,8 @@ def news(ctx: Ctx, code: str, force: bool = False) -> dict:
     name = name_of(ctx, code) or code
     try:
         items = ctx.news.search(f"{name} 주가" if ctx.news.source == "google_rss" else name, 15)
-    except ApiError as e:
-        return {"items": [], "error": str(e), "source": ctx.news.source}
+    except ApiError:
+        return {"items": [], "error": "뉴스를 지금 못 받았습니다. 잠시 뒤 '새로 받기'를 눌러 보세요.", "source": ctx.news.source}
     from ..timeutil import iso_kst
     with ctx.store.db() as con:
         con.execute("INSERT OR REPLACE INTO news_cache(code, fetched_at, items) VALUES (?,?,?)",
@@ -504,7 +594,8 @@ def ops(ctx: Ctx) -> dict:
     if fw.exists():
         first_week = fw.read_text(encoding="utf-8")
     return {"table": table, "labels": ITEM_LABELS, "streaks": streaks, "disk": du, "data_size": _dir_size(ctx.store.data_dir),
-            "backups": backups[-10:], "other": other, "verify": outlook.verify(ctx.store), "first_week": first_week,
+            "backups": backups[-10:], "other": other, "login": ctx.store.login_fail_summary(time.time() - 86400), "verify": _verify_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)),
+            "avoid": _avoid_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)), "first_week": first_week,
             "fc_live": fcmod.live_record(ctx.store), "fc_model": fcmod.MODEL_VERSION,
             "remote_backup": bool(ctx.settings.get("BACKUP_CMD"))}
 

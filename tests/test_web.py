@@ -18,9 +18,11 @@ def client(settings, monkeypatch, tmp_path):
     return appmod.app.test_client(), appmod
 
 
-def login(c):
-    r = c.post("/login", data={"password": "pw"})
+def login(c, base_url="http://localhost"):
+    r = c.post("/login", data={"password": "pw"}, base_url=base_url)
     assert r.status_code == 302
+    with c.session_transaction(base_url=base_url) as sess:          # 화면의 <meta name="csrf">와 같은 값 — 이후 요청에 자동으로 붙인다
+        c.environ_base["HTTP_X_CSRF"] = sess["csrf"]
 
 
 def test_requires_login(client):
@@ -92,11 +94,11 @@ def test_key_change_blocked_without_secure_context(client):
 
 def test_key_change_allowed_over_https_and_never_echoed(client):
     c, appmod = client
-    login(c)
+    login(c, base_url="https://localhost")
     r = c.post("/api/apis/dart/keys", json={"values": {"DART_API_KEY": "secretvalue1234"}},
                base_url="https://localhost", environ_base={"REMOTE_ADDR": "203.0.113.5"})
     assert r.status_code == 200 and r.get_json()["changed"] == ["DART_API_KEY"]
-    page = c.get("/apis").get_data(as_text=True)
+    page = c.get("/apis", base_url="https://localhost").get_data(as_text=True)
     assert "secretvalue1234" not in page and "1234" in page
     r = c.post("/api/apis/dart/keys", json={"values": {"DASH_PASSWORD": "x"}}, base_url="https://localhost")
     assert r.status_code == 400
@@ -118,11 +120,17 @@ def test_healthz_has_no_secrets(client, monkeypatch):
     monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 10, 10, 0, tzinfo=KST))   # 시각 고정
     r = c.get("/healthz")
     assert r.status_code == 200 and "pw" not in r.get_data(as_text=True)
+    c2, appmod = client
+    st = appmod.ctx().store
+    rid = st.start_run("daily", dt.date(2026, 11, 9))
+    st.finish_run(rid, "ok", {})
+    appmod._health_cache.update(t=0.0, v=None)
     monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 10, 22, 30, tzinfo=KST))
-    assert c.get("/healthz").status_code == 503      # 거래일 22시 뒤 그날 수집 기록이 없으면 503이 정상
+    r = c.get("/healthz")
+    assert r.status_code == 503 and r.get_json() == {"ok": False, "codes": ["daily_failed"]}   # 22시 뒤 그날 기록 없음
 
 
-def test_stock_page_with_data_shows_new_sections(client):
+def test_stock_page_with_data_shows_new_sections(client, monkeypatch):
     import datetime as dt
     import pandas as pd
     from bkkstock.timeutil import trading_days_back
@@ -137,11 +145,21 @@ def test_stock_page_with_data_shows_new_sections(client):
                                                      "orgn_ntby_tr_pbmn": -50, "prsn_ntby_tr_pbmn": -50}]))
     st.upsert_watch("000001", "종목000001", "보유", 10, 9000, "")
     login(c)
+    from bkkstock.timeutil import KST
+    from bkkstock.web import data as datamod
+    # 금요일(11/06) 저녁에 본다 → 예측 대상 11/09(월) 장 전이라 숫자가 보여야 한다
+    monkeypatch.setattr(datamod, "now_kst", lambda: dt.datetime(2026, 11, 6, 21, 0, tzinfo=KST))
     page = c.get("/stocks/000001").get_data(as_text=True)
-    for word in ("내일 예측가", "보통 범위", "이동평균", "지수 대비 성과", "연속 순매수", "거래대금 대비", "성적표" , "참고값"):
+    for word in ("내일 예측가", "종가 보통 범위", "이동평균", "지수 대비 성과", "연속 순매수", "거래대금 대비", "성적표", "참고값",
+                 "위험 표시", "수정주가"):
         assert word in page, word
+    assert "방향 적중" not in page                     # 기준선 없는 적중률은 보이지 않는다
+    # 예측 대상일 장이 이미 열렸으면 지난 계산이라 숫자를 숨긴다
+    monkeypatch.setattr(datamod, "now_kst", lambda: dt.datetime(2026, 11, 9, 10, 0, tzinfo=KST))
+    assert "장이 이미 시작돼" in c.get("/stocks/000001").get_data(as_text=True)
     home = c.get("/").get_data(as_text=True)
-    assert "시장 개요" in home and "내일 보통 범위" in home and "보유 평가금액" in home
+    assert "오늘 내 종목에서 볼 것" in home and "보유 평가금액" in home
+    assert "내일 보통 범위" not in home and "많이 오른 종목" not in home and "거래대금 상위" not in home
     news = c.get("/api/stock/000001/news").get_json()
     assert "summary" in news or "error" in news
 

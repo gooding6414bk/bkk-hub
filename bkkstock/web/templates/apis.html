@@ -8,7 +8,7 @@
   연결 테스트와 상태 확인은 지금도 됩니다.
 </section>
 {% endif %}
-<div class="toolbar"><button data-job="first-week-check">첫 주 점검 실행</button><span class="muted small">모든 API를 한 번씩 불러보고 결과를 운영 탭에 남깁니다.</span></div>
+<details class="toolbar"><summary class="muted small">점검 도구</summary><button data-job="first-week-check">전체 API 점검 실행</button><span class="muted small">모든 API를 한 번씩 불러보고 결과를 운영 탭에 남깁니다 (결과에 키는 가려져 남습니다).</span></details>
 <div class="api-grid">
 {% for a in cards %}
 <section class="card api" id="api-{{ a.id }}">
@@ -50,12 +50,6 @@
   </details>
 </section>
 {% endfor %}
-{% if has_gibalhae %}
-<section class="card api">
-  <div class="card-head"><h2>🎬 영상 콘텐츠 연결</h2></div>
-  <p class="small">JSON2Video, 유튜브, Pexels, ElevenLabs, 워드프레스 키는 🎬 영상 화면의 연결 탭에서 넣고 확인합니다. 값은 서버 안 파일(권한 600)에만 저장됩니다.</p>
-  <div class="actions"><a class="pill" href="/media#keys">🎬 영상 → 연결로 가기</a></div>
-</section>
-{% endif %}
+{# 영상 쪽 키는 🎬 화면 안에서만 다룬다 (이 화면에 영상 일을 드러내지 않음) #}
 </div>
 {% endblock %}

@@ -32,15 +32,35 @@ LEXICON: list[tuple[str, str, tuple[str, ...]]] = [
 ]
 
 _PUNCT = re.compile(r"[\[\]()<>『』「」\"'“”‘’…·,.!?:;/|-]")
+# 단어 뒤에 붙으면 뜻이 뒤집히는 말 (예: '유상증자 철회', '거래정지 해제', '흑자전환 실패', '수주 무산')
+REVERSAL = ("철회", "해제", "해소", "탈출", "무혐의", "승소", "축소", "면해", "벗어", "실패", "불발", "무산", "지연", "해지",
+            "취소", "부인", "아니")
+# 하향 표현 ('목표가↓', '목표가 낮춰')
+EXTRA = [("증권가 하향", "neg", ("목표가↓", "목표주가↓", "목표가 낮", "목표주가 낮", "눈높이 낮")),
+         ("증권가 상향", "pos", ("목표가↑", "목표주가↑", "목표가 높", "목표주가 높", "눈높이 높"))]
+# 광고성 '확률' 기사는 뺀다
+SPAM = re.compile(r"(상승\s*확률|AI\s*주식|AI\s*분석|급등\s*예상|무료\s*추천|리딩방)")
 
 
-def classify_title(title: str) -> dict:
+def classify_title(title: str, subject: str = "") -> dict:
     t = title or ""
+    if subject:
+        t = t.replace(subject, " ")          # 회사 이름 속 낱말(예: 삼성'화재')로 분류하지 않게
     hits: OrderedDict[str, list[str]] = OrderedDict()
-    for cat, _, words in LEXICON:
-        found = [w for w in words if w in t]
+    flipped: list[str] = []
+    for cat, _, words in LEXICON + EXTRA:
+        found = []
+        for w in words:
+            i = t.find(w)
+            if i < 0:
+                continue
+            tail = t[i + len(w): i + len(w) + 8]
+            if any(r in tail for r in REVERSAL):
+                flipped.append(w)            # 뜻이 뒤집혔으니 이 방향으로는 세지 않는다
+                continue
+            found.append(w)
         if found:
-            hits[cat] = found
+            hits.setdefault(cat, []).extend(found)
     pos = [c for c in hits if _dir(c) == "pos"]
     neg = [c for c in hits if _dir(c) == "neg"]
     # 주가 강세/약세 단어만 있으면 재료가 아니라 결과라서 약하게 본다
@@ -58,11 +78,14 @@ def classify_title(title: str) -> dict:
         tone = "neg"
     else:
         tone = "neutral"
-    return {"tone": tone, "categories": list(hits), "words": sorted({w for ws in hits.values() for w in ws})}
+    if tone == "neutral" and flipped:
+        tone = "mixed"                       # '철회·해제' 같은 반전은 방향을 단정하지 않는다
+    return {"tone": tone, "categories": list(hits), "words": sorted({w for ws in hits.values() for w in ws}),
+            "flipped": flipped}
 
 
 def _dir(cat: str) -> str:
-    for c, d, _ in LEXICON:
+    for c, d, _ in LEXICON + EXTRA:
         if c == cat:
             return d
     return ""
@@ -82,12 +105,14 @@ def _similar(a: str, b: str) -> bool:
 
 
 def dedupe(items: list[dict]) -> list[dict]:
+    """비슷한 제목은 한 소식으로 묶는다. 단 방향이 다르면(목표가 상향 / 하향) 묶지 않는다."""
     out: list[dict] = []
     keys: list[str] = []
     for it in items:
         k = _norm(it.get("title", ""))
+        tone = it.get("tone")
         for i, prev in enumerate(keys):
-            if _similar(k, prev):
+            if _similar(k, prev) and out[i].get("tone") == tone:
                 out[i]["dupes"] = out[i].get("dupes", 0) + 1
                 break
         else:
@@ -98,9 +123,9 @@ def dedupe(items: list[dict]) -> list[dict]:
 
 def summarize(items: list[dict], subject: str = "") -> dict:
     """뉴스 목록 → 분류·비율·요약 문장."""
-    uniq = dedupe(items)
-    for it in uniq:
-        it.update(classify_title(it.get("title", "")))
+    items = [it for it in items if not SPAM.search(it.get("title") or "")]
+    tagged = [dict(it, **classify_title(it.get("title", ""), subject)) for it in items]
+    uniq = dedupe(tagged)
     n = len(uniq)
     cnt = Counter(it["tone"] for it in uniq)
     cats_pos = Counter(c for it in uniq for c in it["categories"] if _dir(c) == "pos")
@@ -120,13 +145,11 @@ def summarize(items: list[dict], subject: str = "") -> dict:
             lines.append("악재는 주로 " + ", ".join(f"{c}({k})" for c, k in cats_neg.most_common(3)) + ".")
         if not cats_pos and not cats_neg:
             lines.append("눈에 띄는 호재·악재 단어가 없습니다.")
-        bal = cnt.get("pos", 0) - cnt.get("neg", 0)
         if n >= 5:
-            lines.append("뉴스 분위기는 " + ("긍정 쪽" if bal >= 2 else "부정 쪽" if bal <= -2 else "엇갈림") +
-                         "입니다. 뉴스는 대개 이미 가격에 반영돼 있으니 방향 판단의 근거로 쓰지는 마세요.")
+            lines.append("단어로 나눈 것이라 틀릴 수 있고, 뉴스는 대개 이미 가격에 반영돼 있어 방향 판단의 근거로 쓰지 않습니다.")
     groups = []
-    for cat, d, _ in LEXICON:
-        if cat in by_cat:
+    for cat, d, _ in LEXICON + EXTRA:
+        if cat in by_cat and not any(g["category"] == cat for g in groups):
             groups.append({"category": cat, "dir": d, "count": len(by_cat[cat]),
                            "examples": [x["title"] for x in by_cat[cat][:2]]})
     groups.sort(key=lambda g: (-g["count"], g["dir"]))
@@ -134,7 +157,8 @@ def summarize(items: list[dict], subject: str = "") -> dict:
             "raw_n": len(items)}
 
 
-DISC_TONE = {"희석": "neg", "부실": "neg", "매도압력": "neg", "소송": "neg", "주주환원": "pos", "실적": "neutral", "수주": "pos"}
+DISC_TONE = {"희석": "neg", "부실": "neg", "매도압력": "neg", "소송": "neg", "계약해지": "neg", "영업위험": "neg",
+             "주주환원": "pos", "실적": "neutral", "수주": "pos"}
 
 
 def disclosure_summary(discs: list[dict], days: int = 90) -> dict:

@@ -83,7 +83,8 @@ def universe_flags(row: dict | pd.Series | None, today: dt.date) -> list[Flag]:
 def disclosure_flags(disclosures: list[dict], today: dt.date) -> list[Flag]:
     out: list[Flag] = []
     seen: set[str] = set()
-    windows = {"희석": (60, "warn"), "부실": (120, "block"), "매도압력": (30, "warn"), "소송": (60, "warn")}
+    windows = {"희석": (60, "warn"), "부실": (120, "block"), "매도압력": (30, "warn"), "소송": (60, "warn"),
+               "계약해지": (30, "warn"), "영업위험": (30, "warn"), "상폐우려": (60, "warn")}
     for d in sorted(disclosures, key=lambda x: x.get("rcept_dt") or "", reverse=True):
         tags = set(filter(None, (d.get("tags") or "").split(",")))
         rd = d.get("rcept_dt") or ""
@@ -93,29 +94,100 @@ def disclosure_flags(disclosures: list[dict], today: dt.date) -> list[Flag]:
             continue
         for tag, (days, level) in windows.items():
             if tag in tags and (today - day).days <= days and tag not in seen:
-                # 감사의견 '적정' 같은 문구가 섞인 보고서는 부실로 보지 않는다
-                if tag == "부실" and "적정" in (d.get("report_nm") or "") and "부적정" not in (d.get("report_nm") or ""):
-                    continue
                 seen.add(tag)
                 out.append(Flag(level, tag, f"{tag} 공시: {d.get('report_nm')}", since=day.isoformat()))
     return out
 
 
-def horse_events(hist: pd.DataFrame) -> pd.DataFrame:
-    """한 종목의 일별 시세(오래된 순)에서 경주마형 급등일을 찾는다."""
+# 급등의 '재료'로 인정하는 공시. 지분 보고·조회공시 요구·시장조치·IR·정정은 재료가 아니다
+# (조회공시 요구는 거래소가 '설명 안 되는 급등'이라 묻는 것 — 차단을 풀어 주면 안 된다).
+MATERIAL_TAGS = {"실적", "수주", "주주환원"}
+MATERIAL_WORDS = ("잠정실적", "영업(잠정)실적", "매출액또는손익구조", "공급계약체결", "단일판매ㆍ공급계약체결", "임상",
+                  "품목허가", "허가", "기술이전", "기술도입", "라이선스", "합병", "분할결정", "영업양수", "영업양도",
+                  "자기주식취득", "주식소각", "무상증자결정", "현금ㆍ현물배당", "특허", "투자판단관련주요경영사항",
+                  "신규시설투자", "타법인주식및출자증권취득", "공개매수", "최대주주변경을수반하는")
+NOT_MATERIAL_WORDS = ("조회공시", "대량보유", "소유상황", "특정증권등", "기업설명회", "IR", "투자주의", "투자경고",
+                      "투자위험", "단기과열", "매매거래정지", "풍문", "해명", "미확정")
+
+
+def is_material(d: dict) -> bool:
+    name = (d.get("report_nm") or "").replace(" ", "")
+    tags = set(filter(None, (d.get("tags") or "").split(",")))
+    if "정정" in tags or any(w in name for w in NOT_MATERIAL_WORDS):
+        return False
+    return bool(tags & MATERIAL_TAGS) or any(w in name for w in MATERIAL_WORDS)
+
+
+def horse_events(hist: pd.DataFrame, market: dict | None = None) -> pd.DataFrame:
+    """한 종목의 일별 시세(오래된 순)에서 경주마형 급등일을 찾는다.
+    market: {날짜: 그날 같은 시장 종목들의 중앙 등락률}. 시장 전체가 오른 날(예: 지수 +5%)에 같이 오른 것은
+    '재료 없는 급등'이 아니므로 시장 대비 초과 상승률로 판정한다."""
     if hist is None or len(hist) < 2:
-        return pd.DataFrame(columns=["date", "ret", "value_x"])
+        return pd.DataFrame(columns=["date", "ret", "value_x", "mkt"])
     h = hist.sort_values("date").copy()
     h["ret"] = h["close"] / h["close"].shift(1) - 1
+    h["mkt"] = h["date"].map(market).fillna(0.0).astype(float) if market else 0.0
+    ex = h["ret"] - h["mkt"]
     base = h["total_value"] if "total_value" in h.columns else h["value"]
     h["avg20"] = base.shift(1).rolling(20, min_periods=5).mean()
     h["value_x"] = base / h["avg20"]
-    cond = (h["ret"] >= HORSE_RET) | (h["ret"] >= LIMIT_UP) | ((h["ret"] >= HORSE_RET_VOL) & (h["value_x"] >= HORSE_VOL_X))
-    return h.loc[cond, ["date", "ret", "value_x"]].reset_index(drop=True)
+    cond = (ex >= HORSE_RET) | ((h["ret"] >= LIMIT_UP) & (ex >= HORSE_RET_VOL)) | ((ex >= HORSE_RET_VOL) & (h["value_x"] >= HORSE_VOL_X))
+    return h.loc[cond, ["date", "ret", "value_x", "mkt"]].reset_index(drop=True)
 
 
-def horse_flags(hist: pd.DataFrame, disclosures: list[dict], today: dt.date) -> list[Flag]:
-    ev = horse_events(hist)
+def market_returns(prices: pd.DataFrame, index: pd.DataFrame | None = None) -> dict[str, dict]:
+    """시장(코스피·코스닥)별 날짜별 '시장 수익률'. {시장: {날짜: 수익률}}
+    = max(같은 시장 종목들의 중앙 등락률, 그 시장 지수 등락률). 대형주가 지수를 끌어올린 날(중앙값은 작음)에
+    대형주가 '재료 없는 급등'으로 잡히지 않게 둘 중 큰 쪽을 뺀다."""
+    if prices is None or prices.empty or "close" not in prices:
+        return {}
+    p = prices.sort_values(["code", "date"])
+    r = p.groupby("code")["close"].pct_change(fill_method=None)
+    mk = p["market"].astype(str).str.upper() if "market" in p.columns else pd.Series("ALL", index=p.index)
+    df = pd.DataFrame({"date": p["date"], "mk": mk.where(mk.isin(["KOSPI", "KOSDAQ"]), "ALL"), "r": r}).dropna()
+    out: dict[str, dict] = {}
+    for m, g in df.groupby("mk"):
+        out[m] = g.groupby("date")["r"].median().to_dict()
+    if index is not None and not index.empty and {"date", "name", "change_pct"} <= set(index.columns):
+        names = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
+        ix = index.assign(r=pd.to_numeric(index["change_pct"].astype(str).str.replace(",", ""), errors="coerce") / 100)
+        for m, nm in names.items():
+            sub = ix[ix["name"].astype(str) == nm].dropna(subset=["r"])
+            if sub.empty:
+                continue
+            cur = out.setdefault(m, {})
+            for d, r in zip(sub["date"], sub["r"]):
+                cur[d] = max(cur.get(d, r), r)
+    return out
+
+
+# 상장폐지 요건(시가총액) — 2026-07부터 코스피 300억·코스닥 200억, 2027-01부터 500억·300억.
+# 30거래일 연속 밑돌면 관리종목. 금액은 규정 원문으로 다시 확인할 것(뉴스레터마다 다르게 적힘) → 경고는 '주의'까지만.
+MKTCAP_RULES = [(dt.date(2027, 1, 1), {"KOSPI": 500e8, "KOSDAQ": 300e8}),
+                (dt.date(2026, 7, 1), {"KOSPI": 300e8, "KOSDAQ": 200e8})]
+
+
+def delist_flags(market: str, mktcap: float | None, close: float | None, today: dt.date) -> list[Flag]:
+    out: list[Flag] = []
+    m = (market or "").upper()
+    rule = next((r for start, r in MKTCAP_RULES if today >= start), None)
+    nxt = MKTCAP_RULES[0][1] if today < MKTCAP_RULES[0][0] else None
+    if rule and m in rule and mktcap and mktcap > 0:
+        lim = rule[m]
+        if mktcap < lim:
+            out.append(Flag("warn", "시총미달", f"시가총액 {mktcap / 1e8:,.0f}억 < 상장 유지 기준 {lim / 1e8:,.0f}억 "
+                                               "(30거래일 연속이면 관리종목)"))
+        elif mktcap < lim * 1.5:
+            out.append(Flag("info", "시총근접", f"시가총액 {mktcap / 1e8:,.0f}억 — 기준 {lim / 1e8:,.0f}억의 1.5배 미만"))
+        if nxt and m in nxt and mktcap < nxt[m] and not out:
+            out.append(Flag("info", "시총근접", f"2027-01 기준 {nxt[m] / 1e8:,.0f}억에 못 미침 (지금 {mktcap / 1e8:,.0f}억)"))
+    if close is not None and 0 < close < 1000:
+        out.append(Flag("info", "동전주", f"주가 {close:,.0f}원 — 1,000원 미만 (동전주 상장폐지 요건 확인)"))
+    return out
+
+
+def horse_flags(hist: pd.DataFrame, disclosures: list[dict], today: dt.date, market: dict | None = None) -> list[Flag]:
+    ev = horse_events(hist, market)
     if ev.empty:
         return []
     window = trading_days_back(today, HORSE_LOOKBACK)
@@ -127,9 +199,9 @@ def horse_flags(hist: pd.DataFrame, disclosures: list[dict], today: dt.date) -> 
     # 재료: 급등 전날 ~ 당일에 나온 공시 (장 마감 후 공시가 다음 날 급등의 이유일 수 있다)
     prev = trading_days_back(day, 2)[0]
     material = [d for d in disclosures if (d.get("rcept_dt") or "") in (prev.strftime("%Y%m%d"), day.strftime("%Y%m%d"))
-                and "정정" not in (d.get("tags") or "")]
+                and is_material(d)]
     after = [d for d in _following_trading_days(day, HORSE_BLOCK_DAYS)]
-    pct = f"{last['ret'] * 100:+.1f}%"
+    pct = f"{last['ret'] * 100:+.1f}%" + (f"(시장 {last['mkt'] * 100:+.1f}%)" if abs(last.get("mkt") or 0) >= 0.01 else "")
     vx = f", 거래대금 {last['value_x']:.1f}배" if pd.notna(last["value_x"]) else ""
     if not material:
         until = after[-1] if after else day

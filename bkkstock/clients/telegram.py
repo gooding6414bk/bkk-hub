@@ -29,9 +29,13 @@ class Telegram:
             wait = 1.1 - (time.monotonic() - self._last)
             if wait > 0:
                 time.sleep(wait)
-            r = self.http.post(f"https://api.telegram.org/bot{self.s.get('TELEGRAM_BOT_TOKEN')}/sendMessage",
-                               json={"chat_id": self.s.get("TELEGRAM_CHAT_ID"), "text": chunk,
-                                     "disable_web_page_preview": True})
+            try:
+                r = self.http.post(f"https://api.telegram.org/bot{self.s.get('TELEGRAM_BOT_TOKEN')}/sendMessage",
+                                   json={"chat_id": self.s.get("TELEGRAM_CHAT_ID"), "text": chunk,
+                                         "disable_web_page_preview": True})
+            except httpx.HTTPError as e:      # 연결 오류도 ApiError로 — 보고 뒤의 백업이 건너뛰어지지 않게
+                self.store.api_mark(self.api, False, f"연결 오류 {type(e).__name__}")
+                raise ApiError(self.api, "network", type(e).__name__, retryable=True) from e
             self._last = time.monotonic()
             ok = r.status_code == 200 and r.json().get("ok")
             if not ok:

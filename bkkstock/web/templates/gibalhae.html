@@ -51,6 +51,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>window.GB_USER = {{ (username or (user.username if user else "주인"))|tojson }};</script>
+<script nonce="{{ csp_nonce }}">window.GB_USER = {{ (username or (user.username if user else "주인"))|tojson }};</script>
 <script src="{{ url_for('gibalhae.static', filename='gibalhae.js') }}?v={{ version }}"></script>
 {% endblock %}

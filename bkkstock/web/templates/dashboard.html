@@ -1,111 +1,118 @@
 {% extends "base.html" %}{% import "_m.html" as m %}
-{% macro gbst(st) -%}{%- set t = {"draft": ("warn", "초안·승인 대기"), "approved": ("run", "승인"), "built": ("ok", "영상 완성"), "published": ("ok", "올림"), "rejected": ("fail", "반려")} -%}{%- set v = t.get(st, ("none", "없음")) -%}<span class="st {{ v[0] }}">{{ v[1] }}</span>{%- endmacro %}
 {% block title %}대시보드{% endblock %}
 {% block content %}
-<section class="status card">
-  <div class="status-head">
-    {% set lr = d.last_run %}
-    {% if lr %}{{ m.dot('ok' if lr.status == 'ok' else 'warn' if lr.status in ('partial', 'running') else 'fail' if lr.status == 'fail' else 'none') }}
-      <strong>일일 수집 {{ lr.day[5:] }}</strong> {{ m.st(lr.status) }}<span class="muted">완료 {{ lr.finished_at | ts }}</span>
-    {% else %}{{ m.dot('none') }}<strong>아직 일일 수집 기록이 없습니다</strong><span class="muted">설치 후 첫 실행은 평일 20:30, 또는 운영 탭에서 지금 수집</span>{% endif %}
-    <span class="spacer"></span>
-    <a class="pill" href="/apis">API 정상 {{ d.api_ok }}{% if d.api_bad %} · <b class="t-bad">오류 {{ d.api_bad }}</b>{% endif %}{% if d.api_missing %} · <b class="t-warn">미설정 {{ d.api_missing }}</b>{% endif %}</a>
-  </div>
-  <div class="items">
-    {% for it in d.item_status %}<span class="item {{ it.status or 'none' }}" title="{{ it.message }}">{{ it.label }}{% if it.count is not none and it.status == 'ok' %} <em>{{ it.count | num }}</em>{% endif %}</span>{% endfor %}
-  </div>
-  <p class="muted small">공시 조회 마지막 {{ (d.last_poll.finished_at | ts) if d.last_poll else '–' }} · 기준일 {{ d.day or '–' }} · 점수 계산 {{ d.n_scored | num }}종목{% if not d.trading_today %} · 오늘은 휴장일{% endif %}</p>
+{#- 순서(2026-11 내부 점검): ① 내 종목 위험 ② 내 종목 ③ 시장 한 줄 ④ 수집 상태 한 줄 ⑤ 나머지는 접기.
+    '많이 오른·거래대금 상위' 순위는 추격 매수를 부르는 구조라 메인에서 뺐다 (원칙 1). -#}
+{% set r = d.risk %}
+<section class="card risk-card {{ 'has-block' if r.rows and r.rows[0].sev == 0 }}">
+  <div class="card-head"><h2>오늘 내 종목에서 볼 것</h2><span class="muted small">{{ d.data.text }}</span></div>
+  {% if d.alerts_off %}
+  <p class="alert-off">🔕 <b>휴대폰 알림이 꺼져 있습니다</b> (텔레그램 미설정) — 위험은 이 화면에서만 보입니다{% if d.unsent %} · 못 보낸 알림 {{ d.unsent }}건{% endif %}. <a href="/apis#api-telegram">연결하기</a></p>
+  {% endif %}
+  {% if d.data.state == 'none' %}
+    <p class="empty warnbox">{{ d.data.text }}</p>
+  {% elif not d.watch %}
+    <p class="empty">등록한 종목이 없습니다. <a href="/stocks">주식 관리</a>에서 보유·관심 종목을 추가하면 여기에 위험이 모입니다.</p>
+  {% elif r.rows %}
+    {% if d.data.state == 'stale' %}<p class="warnbox small">{{ d.data.text }}</p>{% endif %}
+    <ul class="risk-list">
+    {% for it in r.rows %}
+      <li class="sev{{ it.sev }}"><span class="ri">{{ it.icon }}</span>
+        <div><a href="/stocks/{{ it.code }}" class="name">{{ it.name }}</a>{% if it.own %} <span class="tag own">보유</span>{% endif %}
+          <span class="kind">{{ it.kind }}</span>{% if it.when %} <span class="muted small">{{ it.when }}</span>{% endif %}
+          <p class="small">{% if it.url %}<a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.text }}</a>{% else %}{{ it.text }}{% endif %}</p></div></li>
+    {% endfor %}
+    </ul>
+    {% if r.more %}<p class="muted small">+ {{ r.more }}건 더 — 각 종목 화면에서 보세요.</p>{% endif %}
+  {% else %}
+    {% if d.data.state == 'stale' %}<p class="warnbox small">{{ d.data.text }}</p>{% endif %}
+    <p class="ok-line">✓ 보유·관심 {{ d.watch | length }}종목에 매수 금지·위험 공시·주의 표시가 없습니다.</p>
+  {% endif %}
 </section>
-
-{# 영상 콘텐츠 카드는 메인에서 뺐다(다른 사람이 보지 않게) — 상단 🎬 으로 들어간다 #}
-
-{% set mk = d.market %}
-{% if mk %}
-<section class="card">
-  <div class="card-head"><h2>시장 개요</h2><span class="muted small">{{ mk.day }} 기준</span></div>
-  <div class="mk">
-    {% for ix in mk.index %}<div><span>{{ ix.name }}</span><b class="num">{{ ix.close | num(2) }}</b> {{ m.chg(ix.change_pct) }}</div>{% endfor %}
-    <div><span>오른 종목 · 내린 종목</span><b><span class="up">{{ mk.up | num }}</span> · <span class="down">{{ mk.down | num }}</span></b>{% if mk.limit_up or mk.limit_down %}<span>상한가 {{ mk.limit_up }} · 하한가 {{ mk.limit_down }}</span>{% endif %}</div>
-    {% if mk.new_high is defined %}<div><span>{{ mk.hl_days }}일 신고가 · 신저가</span><b><span class="up">{{ mk.new_high | num }}</span> · <span class="down">{{ mk.new_low | num }}</span></b></div>{% endif %}
-    {% for o in mk.overseas %}<div><span>{{ o.label }} <span class="muted">({{ o.date }})</span></span><b class="num">{{ o.close | num(2) }}</b> {{ m.chg(o.change_pct) }}</div>{% endfor %}
-  </div>
-  <div class="grid3" style="margin-top:12px">
-    <div><h3>거래대금 상위</h3><ul class="mini-list">{% for r in mk.top_value %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a><span>{{ r.value | eok }} {{ m.chg(r.change_pct) }}</span></li>{% endfor %}</ul></div>
-    <div><h3>많이 오른 종목</h3><ul class="mini-list">{% for r in mk.top_up %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a>{{ m.chg(r.change_pct) }}</li>{% endfor %}</ul></div>
-    <div><h3>많이 내린 종목</h3><ul class="mini-list">{% for r in mk.top_down %}<li><a href="/stocks/{{ r.code }}">{{ r.name }}</a>{{ m.chg(r.change_pct) }}</li>{% endfor %}</ul></div>
-  </div>
-  <p class="caveat">많이 오른 종목은 매수 후보가 아닙니다. 재료 없는 급등은 아래 '재료 없는 급등'에서 매수 금지로 표시됩니다.</p>
-</section>
-{% endif %}
-
-{% if d.checks %}
-<section class="card">
-  <div class="card-head"><h2>오늘 체크할 것</h2><span class="muted small">보유·관심 종목에서 자동으로 고름</span></div>
-  <ul class="check-list">{% for c in d.checks %}<li>{{ c }}</li>{% endfor %}</ul>
-</section>
-{% endif %}
 
 <section class="card">
   <div class="card-head"><h2>📈 내 종목</h2><a href="/stocks" class="pill">관리</a></div>
   {% if d.totals %}{% set t = d.totals %}
   <div class="kv2">
     <div><span>보유 평가금액</span><b class="num">{{ t.value | num }}원</b></div>
-    <div><span>평가손익</span><b class="num {{ 'up' if t.pnl > 0 else 'down' if t.pnl < 0 }}">{{ '{:+,.0f}'.format(t.pnl) }}원</b>{% if t.pnl_pct is not none %} {{ m.chg(t.pnl_pct) }}{% endif %}</div>
-    <div><span>오늘 손익</span><b class="num {{ 'up' if t.pnl_today > 0 else 'down' if t.pnl_today < 0 }}">{{ '{:+,.0f}'.format(t.pnl_today) }}원</b></div>
+    <div><span>평가손익</span><b class="num">{{ m.won(t.pnl) }}</b>{% if t.pnl_pct is not none %} {{ m.chg(t.pnl_pct) }}{% endif %}</div>
+    <div><span>오늘 손익</span><b class="num">{{ m.won(t.pnl_today) }}</b></div>
   </div>
   {% endif %}
   {% if d.watch %}
-  <div class="tbl-wrap"><table class="tbl cards">
-    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">등락</th><th class="r">내일 보통 범위</th><th>참고 점수</th><th>위험 표시</th></tr></thead>
+  <div class="tbl-wrap"><table class="tbl cards compact-cards">
+    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">어제보다</th><th class="r">평가손익</th><th>참고 점수</th><th>위험</th></tr></thead>
     <tbody>
     {% for w in d.watch %}
       <tr class="{{ 'row-block' if w.blocked }}">
         <td class="full"><a href="/stocks/{{ w.code }}" class="name">{{ w.name or w.code }}</a> <span class="tag {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span></td>
         <td class="r num" data-label="종가">{{ w.close | num }}</td>
-        <td class="r num" data-label="등락">{{ m.chg(w.change_pct) }}</td>
-        <td class="r num small" data-label="내일 보통 범위">{% if w.fc %}{{ w.fc.lo1 | num }}~{{ w.fc.hi1 | num }}{% if w.fc.us_ready and w.fc.pred_gap %}<div class="muted">시초 {{ '%+.1f' % (w.fc.pred_gap * 100) }}%</div>{% endif %}{% else %}–{% endif %}</td>
-        <td data-label="참고 점수">{{ m.grade(w.score, w.grade, w.arrow, w.blocked, w.enough) }}</td>
-        <td data-label="위험 표시">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
+        <td class="r num" data-label="어제보다">{{ m.chg(w.change_pct) }}</td>
+        <td class="r num" data-label="평가손익">{% if w.pnl is not none %}{{ m.won(w.pnl) }}{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td data-label="참고 점수">{{ m.grade(w.score, w.blocked, w.enough) }}</td>
+        <td data-label="위험">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table></div>
+  <p class="muted small">참고 점수는 1개월 남짓 시장 대비 기울기이고 아직 검증 전입니다 — 내일 오를 확률이 아닙니다. <a href="/stocks#legend">읽는 법</a></p>
   {% else %}
   <p class="empty">아직 등록한 종목이 없습니다. <a href="/stocks">주식 관리</a>에서 보유·관심 종목을 추가하세요.</p>
   {% endif %}
 </section>
 
-<div class="grid2">
-  <section class="card">
-    <div class="card-head"><h2>재료 없는 급등</h2><span class="muted small">경주마 · 20거래일 매수 금지</span></div>
-    {% if d.horses %}<ul class="list">
-      {% for r in d.horses %}<li><a href="/stocks/{{ r.code }}" class="name">{{ r.name }}</a><span class="muted small">{{ r.code }}</span><p class="small">{{ r.flag.text }}</p></li>{% endfor %}
-    </ul>{% else %}<p class="empty">최근 20거래일 동안 없습니다.</p>{% endif %}
-  </section>
-  <section class="card">
-    <div class="card-head"><h2>재료 있는 급등</h2><span class="muted small">공시가 붙은 급등 · 재평가 대기</span></div>
-    {% if d.material %}<ul class="list">
-      {% for r in d.material %}<li><a href="/stocks/{{ r.code }}" class="name">{{ r.name }}</a><span class="muted small">{{ r.code }}</span><p class="small">{{ r.flag.text }}</p></li>{% endfor %}
-    </ul>{% else %}<p class="empty">재평가를 기다리는 종목이 없습니다.</p>{% endif %}
-  </section>
-</div>
+{% set mk = d.market %}
+{% if mk %}
+<section class="card mk-line">
+  <div class="mk-row">
+    {% for ix in mk.index %}<span><em>{{ ix.name }}</em> <b class="num">{{ ix.close | num(2) }}</b> {{ m.chg(ix.change_pct) }}</span>{% endfor %}
+    {% for o in mk.overseas %}<span><em>{{ o.label }}</em> {{ m.chg(o.change_pct) }}</span>{% endfor %}
+    <span><em>오른·내린</em> <b class="up">{{ mk.up | num }}</b>·<b class="down">{{ mk.down | num }}</b></span>
+  </div>
+  <p class="muted small">{{ mk.day }} 기준 시장 한 줄 · 해외는 밤사이 마지막 종가</p>
+</section>
+{% endif %}
 
-<div class="grid2">
-  <section class="card">
-    <div class="card-head"><h2>최근 위험 공시</h2><span class="muted small">희석 · 부실 · 매도 압력</span></div>
-    {% if d.risky_disclosures %}<ul class="list">
-      {% for x in d.risky_disclosures %}<li>
-        <a href="/stocks/{{ x.stock_code }}" class="name">{{ x.corp_name }}</a>
-        {% for t in x.tags.split(',') if t and t != '정정' %}<span class="chip {{ 'block' if t == '부실' else 'warn' }}">{{ t }}</span>{% endfor %}
-        <p class="small"><a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ x.rcept_no }}" target="_blank" rel="noopener">{{ x.report_nm }}</a> <span class="muted">· {{ x.first_seen_at | ts }}</span></p>
-      </li>{% endfor %}
-    </ul>{% else %}<p class="empty">공시 기록이 아직 없습니다.</p>{% endif %}
-  </section>
-  <section class="card">
-    <div class="card-head"><h2>최근 알림</h2><span class="muted small">텔레그램으로 간 것</span></div>
-    {% if d.alerts %}<ul class="list">
-      {% for a in d.alerts %}<li><span class="muted small">{{ a.created_at | ts }} · {{ a.kind }}{% if not a.sent %} · 미발송{% endif %}</span><p class="small pre">{{ a.message }}</p></li>{% endfor %}
-    </ul>{% else %}<p class="empty">알림이 없습니다.</p>{% endif %}
-  </section>
-</div>
+{% set lr = d.last_run %}
+<section class="card status-line">
+  {% if lr %}
+    {% set bad = d.issues | length %}
+    <p>{{ m.dot('ok' if lr.status == 'ok' and not bad else 'warn' if lr.status in ('partial', 'running', 'pending') or bad else 'fail') }}
+      <b>수집 {{ '정상' if lr.status == 'ok' and not bad else '확인 필요' if lr.status != 'fail' else '실패' }}</b>
+      <span class="muted small">{{ lr.day[5:] }} · 완료 {{ lr.finished_at | ts }} · 공시 조회 {{ (d.last_poll.finished_at | ts) if d.last_poll else '–' }} · 점수 {{ d.n_scored | num }}종목{% if not d.trading_today %} · 오늘 휴장{% endif %}</span>
+      <a class="pill" href="/apis">API {{ d.api_ok }}{% if d.api_bad %} · <b class="t-bad">오류 {{ d.api_bad }}</b>{% endif %}{% if d.api_missing %} · <b class="t-warn">미설정 {{ d.api_missing }}</b>{% endif %}</a></p>
+    {% if bad or lr.status in ('fail', 'partial') %}
+    <div class="items">{% for it in d.item_status if it.status not in ('ok', 'skip', none) %}<span class="item {{ it.status }}" title="{{ it.message }}">{{ it.label }} {{ m.st(it.status) }}</span>{% endfor %}</div>
+    {% endif %}
+  {% else %}
+    <p>{{ m.dot('none') }}<b>아직 일일 수집 기록이 없습니다</b> <span class="muted small">설치 후 첫 실행은 평일 20:30, 또는 운영 탭에서 지금 수집</span></p>
+  {% endif %}
+</section>
+
+<details class="card fold">
+  <summary><b>시장 전체 위험 목록</b> <span class="muted small">재료 없는 급등 {{ d.horses | length }} · 재료 있는 급등 {{ d.material | length }} · 위험 공시 {{ d.risky_disclosures | length }}</span></summary>
+  {% if d.data.state == 'none' %}<p class="empty">아직 자료가 없습니다 (수집 전).</p>{% else %}
+  <div class="grid3">
+    <div><h3>재료 없는 급등 <span class="muted small">20거래일 매수 금지</span></h3>
+      {% if d.horses %}<ul class="list">{% for x in d.horses %}<li><a href="/stocks/{{ x.code }}" class="name">{{ x.name }}</a><p class="small">{{ x.flag.text }}</p></li>{% endfor %}</ul>
+      {% elif d.n_scored %}<p class="empty">최근 20거래일 동안 없습니다.</p>{% else %}<p class="empty">점수 계산 전이라 판정 못 함.</p>{% endif %}</div>
+    <div><h3>재료 있는 급등 <span class="muted small">재평가 대기</span></h3>
+      {% if d.material %}<ul class="list">{% for x in d.material %}<li><a href="/stocks/{{ x.code }}" class="name">{{ x.name }}</a><p class="small">{{ x.flag.text }}</p></li>{% endfor %}</ul>
+      {% elif d.n_scored %}<p class="empty">재평가를 기다리는 종목이 없습니다.</p>{% else %}<p class="empty">점수 계산 전이라 판정 못 함.</p>{% endif %}</div>
+    <div><h3>최근 위험 공시</h3>
+      {% if d.risky_disclosures %}<ul class="list">{% for x in d.risky_disclosures %}<li><a href="/stocks/{{ x.stock_code }}" class="name">{{ x.corp_name }}</a>
+        {% for t in x.tags.split(',') if t and t != '정정' %}<span class="chip {{ 'block' if t == '부실' else 'warn' }}">{{ '⛔' if t == '부실' else '⚠' }} {{ t }}</span>{% endfor %}
+        <p class="small"><a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ x.rcept_no }}" target="_blank" rel="noopener">{{ x.report_nm }}</a></p></li>{% endfor %}</ul>
+      {% else %}<p class="empty">공시 기록이 아직 없습니다.</p>{% endif %}</div>
+  </div>
+  <p class="caveat">시장 전체에서 회피 엔진이 찾은 것입니다. 매수 후보 목록이 아닙니다.</p>
+  {% endif %}
+</details>
+
+<details class="card fold">
+  <summary><b>최근 알림</b> <span class="muted small">{{ '텔레그램 미설정 — 화면에만 쌓임' if d.alerts_off else '텔레그램으로 보낸 것' }}</span></summary>
+  {% if d.alerts %}<ul class="list">
+    {% for a in d.alerts %}<li><span class="muted small">{{ a.created_at | ts }} · {{ a.kind }}{% if not a.sent %} · 미발송{% endif %}</span><p class="small pre">{{ a.message }}</p></li>{% endfor %}
+  </ul>{% else %}<p class="empty">알림이 없습니다.</p>{% endif %}
+</details>
 {% endblock %}

@@ -9,7 +9,8 @@
   first-week-check                     첫 주 점검
   test-apis                            API 연결 확인만
   notify "문구"                        텔레그램으로 한 줄 보내기 (배포 스크립트용)
-  set-password                         대시보드 비밀번호 새로 만들기
+  set-password                         대시보드 비밀번호 새로 만들기 (로그인 잠금도 풂)
+  unlock                               로그인 잠금 풀기 (새 휴대폰이 '실패가 많아 잠김'일 때)
   web [--host 127.0.0.1] [--port 8020] 통합 보드 (주식 + 기발해)
   gibalhae-sync                        저장소의 새 기발해 초안을 서버 데이터 폴더로 복사
   demo-seed                            샘플 데이터 만들기 (화면 미리보기용)
@@ -25,7 +26,8 @@ import sys
 
 
 def main(argv: list[str] | None = None) -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    from .redact import setup_logging
+    setup_logging()
     ap = argparse.ArgumentParser(prog="bkkstock")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("daily")
@@ -41,6 +43,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("first-week-check")
     sub.add_parser("test-apis")
     sub.add_parser("set-password")
+    sub.add_parser("unlock")
     p = sub.add_parser("notify")
     p.add_argument("text")
     p = sub.add_parser("web")
@@ -60,15 +63,28 @@ def main(argv: list[str] | None = None) -> None:
         if copied:
             logging.info("기발해 초안 %d개 파일을 데이터 폴더로 가져옴", len(copied))
         from .web.app import app
-        serve(app, host=args.host, port=args.port, threads=8, ident="bkk-hub")
+        # 같은 서버의 Caddy(127.0.0.1)가 붙이는 X-Forwarded-* 만 믿는다. waitress 3은 이 설정이 없으면
+        # 그 헤더를 지워 버려서 모든 접속자가 127.0.0.1 한 사람으로 보인다(로그인 잠금이 전원에게 걸림).
+        serve(app, host=args.host, port=args.port, threads=8, ident="bkk-hub",
+              trusted_proxy="127.0.0.1", trusted_proxy_count=1,
+              trusted_proxy_headers={"x-forwarded-for", "x-forwarded-proto", "x-forwarded-host"},
+              clear_untrusted_proxy_headers=True)
         return
     if args.cmd == "set-password":
         import secrets
         from .config import get_settings, write_env_values
+        from .store import Store
         pw = secrets.token_urlsafe(12)
         write_env_values(get_settings().env_file, {"DASH_PASSWORD": pw, "DASH_SECRET": secrets.token_hex(32)})
+        Store(get_settings().data_dir).clear_login_fails()
         print(f"새 대시보드 비밀번호: {pw}")
         print("적용: sudo systemctl restart bkk-hub-web   (기존 로그인은 모두 풀립니다)")
+        return
+    if args.cmd == "unlock":
+        from .config import get_settings
+        from .store import Store
+        n = Store(get_settings().data_dir).clear_login_fails()
+        print(f"로그인 실패 기록 {n}건을 지웠습니다. 바로 다시 로그인할 수 있습니다.")
         return
     if args.cmd == "gibalhae-sync":
         from pathlib import Path
@@ -84,6 +100,8 @@ def main(argv: list[str] | None = None) -> None:
     from .jobs.common import AlreadyRunning, make_ctx
     ctx = make_ctx()
     day = dt.date.fromisoformat(args.day) if getattr(args, "day", None) else None
+    hc = args.cmd if args.cmd in HC_JOBS else None
+    _hc_ping(ctx, hc, "start")
     try:
         if args.cmd == "daily":
             from .jobs import daily
@@ -119,7 +137,32 @@ def main(argv: list[str] | None = None) -> None:
             return
     except AlreadyRunning as e:
         print(f"이미 실행 중: {e}")
+        _hc_ping(ctx, hc, "0")
         sys.exit(0)
+    except BaseException:
+        _hc_ping(ctx, hc, "1")
+        raise
     print(json.dumps(res, ensure_ascii=False, indent=1, default=str))
-    if isinstance(res, dict) and res.get("status") == "fail":
+    st = res.get("status") if isinstance(res, dict) else None
+    bad = st == "fail" or (args.cmd in ("morning", "report", "watchdog") and st == "partial")
+    _hc_ping(ctx, hc, "1" if bad else "0")
+    if bad:
         sys.exit(1)
+
+
+# 서버 밖 '죽음 감지' (healthchecks.io 등). .env 의 HC_PING_URL=https://hc-ping.com/<ping-key> 이면
+# 작업마다 <주소>/<작업이름>/start · /0(성공) · /1(실패)을 보낸다. 핑이 안 오면 그쪽에서 메일로 알린다.
+# 텔레그램이 없어도, 서버가 통째로 죽어도 알 수 있는 길. 실패해도 작업에는 영향이 없다.
+HC_JOBS = {"daily", "morning", "report", "watchdog", "dart-poll", "backfill"}
+
+
+def _hc_ping(ctx, job: str | None, what: str) -> None:
+    base = (ctx.settings.get("HC_PING_URL") or "").rstrip("/")
+    if not job or not base.startswith("https://"):
+        return
+    try:
+        import httpx
+        url = f"{base}/bkk-{job}" + ("/start" if what == "start" else f"/{what}")
+        httpx.get(url, params={"create": "1"}, timeout=10)
+    except Exception:  # noqa: BLE001
+        pass

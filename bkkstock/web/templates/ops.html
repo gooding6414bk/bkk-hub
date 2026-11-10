@@ -2,11 +2,12 @@
 {% block title %}운영{% endblock %}
 {% block content %}
 <div class="toolbar">
-  <button data-job="daily">지금 수집</button>
-  <button data-job="backfill">과거 데이터 채우기 (90거래일)</button>
+  <button data-job="daily" data-confirm="오늘 일일 수집을 지금 돌릴까요? (몇 분 걸립니다)">지금 수집</button>
+  <button data-job="backfill" data-confirm="과거 90거래일 시세·130일 공시를 채웁니다. 오래 걸립니다. 시작할까요?">과거 데이터 채우기</button>
   <button data-job="dart-poll" class="ghost">공시 조회</button>
-  <button data-job="report" class="ghost">보고 보내기</button>
+  <button data-job="report" class="ghost" data-confirm="일일 보고를 지금 보낼까요?">보고 보내기</button>
 </div>
+{% if o.login %}<p class="muted small">로그인 실패 최근 24시간 {{ o.login.n }}회{% if o.login.n %} · 주소 {{ o.login.ips }}곳 · 마지막 {{ o.login.last_ip }}{% endif %} — 잠겼으면 서버에서 <code>python -m bkkstock unlock</code></p>{% endif %}
 
 <div class="grid3">
   <section class="card stat"><h3>종목·시장조치 연속 수집</h3><b class="big num">{{ o.streaks.universe }}</b><span class="muted small">거래일 · 빠지면 복구 불가</span></section>
@@ -17,7 +18,7 @@
 <section class="card">
   <div class="card-head"><h2>일일 수집 기록</h2><span class="muted small">재시도까지 합친 항목별 마지막 상태</span></div>
   {% if o.table %}
-  <div class="tbl-wrap"><table class="tbl compact">
+  <div class="tbl-wrap"><table class="tbl compact ops-tbl">
     <thead><tr><th>날짜</th><th>전체</th>{% for k, v in o.labels.items() %}<th>{{ v }}</th>{% endfor %}</tr></thead>
     <tbody>{% for r in o.table %}<tr><td class="num">{{ r.day[5:] }}</td><td>{{ m.st(r.status) }}</td>
       {% for k in o.labels %}<td>{{ m.st(r['items'].get(k)) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
@@ -33,12 +34,12 @@
     </tbody></table>
     <h3>자동 일정 (한국 시간)</h3>
     <table class="tbl compact"><tbody>
-      <tr><td>07:30 · 08:30</td><td>토큰 재발급 · 밤사이 공시 · KRX 전날 시세(다음 날 아침에 올라옴)와 점수 · 해외 시세 · 관심 종목 내일 예측가 저장</td></tr>
+      <tr><td>07:30 · 08:30</td><td>토큰 재발급 · 밤사이 공시 · 최근 10거래일 중 못 받은 KRX 시세(다음 날 아침에 올라옴)와 점수 · 해외 시세 · 관심 종목 예측가 저장(장 전 첫 것만)</td></tr>
       <tr><td>08:00~20:50</td><td>10분마다 새 공시 · 보유 종목 위험 공시 즉시 알림</td></tr>
       <tr><td>20:30</td><td>일일 수집 (평일)</td></tr>
       <tr><td>21:00</td><td>텔레그램 일일 보고 · 백업</td></tr>
-      <tr><td>21:40</td><td>감시 (수집이 안 돌았으면 알림)</td></tr>
-      <tr><td>10분마다</td><td>새 코드가 있으면 자동 업데이트 (주식 서비스만 재시작)</td></tr>
+      <tr><td>21:40</td><td>감시 (수집이 안 돌았거나 공시 조회가 멈췄으면 알림)</td></tr>
+      <tr><td>10분마다</td><td>새 코드가 있으면 임시 폴더에서 시험한 뒤 자동 업데이트 (주식 서비스만 재시작, 실패한 커밋은 다시 받지 않음)</td></tr>
     </tbody></table>
   </section>
   <section class="card">
@@ -52,12 +53,25 @@
   <div class="card-head"><h2>참고 점수 검증</h2><span class="muted small">점수 상위 20%와 하위 20%의 이후 20거래일 초과수익 차이</span></div>
   {% set v = o.verify %}
   {% if v.status == 'ok' %}
-    <ul class="quint">{% for q, val in v.quintiles.items() %}<li><span>{{ q }}분위{% if q == 5 %} (점수 높음){% elif q == 1 %} (낮음){% endif %}</span><b class="num {{ 'up' if val > 0 else 'down' }}">{{ '%+.2f' % val }}%</b></li>{% endfor %}</ul>
-    <p>상위−하위 평균 <b class="num">{{ '%+.2f' % v.spread_mean }}%p</b>{% if v.spread_t is not none %} · t {{ v.spread_t }}{% endif %} · {{ v.n_days }}일</p>
-    <p class="muted small">{{ v.note }} 통과 기준은 설계 문서 4장 (예: 비용 2배에서도 연 +1.5%p, t > 2)입니다.</p>
+    <p class="verdict">판정: <b>{{ v.verdict }}</b> <span class="muted small">(겹치지 않는 표본 {{ v.n_independent }}개{% if v.spread_t is not none %} · 우연일 가능성 지표 t {{ v.spread_t }}{% endif %})</span></p>
+    <ul class="quint">{% for q, val in v.quintiles.items() %}<li><span>{{ '점수 상위 20%' if q == 5 else '점수 하위 20%' if q == 1 else q ~ '번째 묶음' }}</span><b class="num">{{ '%+.2f' % val }}%</b></li>{% endfor %}</ul>
+    <p class="small">상위 − 하위 평균 <b class="num">{{ '%+.2f' % v.spread_mean }}%p</b> · {{ v.n_days }}일 (다음 날 시가에 사서 20거래일 뒤 종가, 시장 평균 대비)</p>
+    <p class="muted small">{{ v.note }} 통과 기준은 설계 문서 4장 (비용 2배에서도 연 +1.5%p, 겹치지 않는 표본으로 t > 2)입니다.</p>
   {% else %}
-    <p class="empty">아직 검증할 수 없습니다. 점수 기록 {{ v.score_days }}일 / 필요 {{ v.need }}일 (점수를 매긴 뒤 {{ v.horizon }}거래일이 지나야 결과가 나옵니다).</p>
+    <p class="empty">아직 검증할 수 없습니다. 실제 수집한 점수 기록 {{ v.score_days }}일 / 필요 {{ v.need }}일{% if v.backfill_days %} (설치 전 백필 {{ v.backfill_days }}일은 시장조치 정보가 없어 빼고 셉니다){% endif %}.</p>
   {% endif %}
+</section>
+
+<section class="card" id="avoid">
+  <div class="card-head"><h2>회피 엔진 성적표</h2><span class="muted small">'사지 말라'고 표시한 종목의 이후 20거래일 시장 대비 수익</span></div>
+  {% set av = o.avoid %}
+  {% if av and av.status == 'ok' %}
+  <div class="tbl-wrap"><table class="tbl compact">
+    <thead><tr><th>표시</th><th class="r">건수</th><th class="r">독립 구간</th><th class="r">평균 (시장 대비)</th><th>판정</th></tr></thead>
+    <tbody>{% for k in av.kinds %}<tr><td>{{ '⛔' if k.level == 'block' else '⚠' }} {{ k.kind }}</td><td class="r num">{{ k.n }}</td><td class="r num">{{ k.blocks }}</td><td class="r num">{{ '%+.2f' % k.mean }}%</td><td>{{ k.verdict }}{% if k.t is not none %} <span class="muted small">t {{ k.t }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="muted small">평균이 마이너스면 피한 게 맞았다는 뜻입니다. 같은 날 여러 종목에 붙은 표시는 함께 움직여서, 20일 구간이 12개 넘게 쌓이기 전에는 판단하지 않습니다.</p>
+  {% else %}<p class="empty">아직 기록이 부족합니다. 실제로 수집한 날의 표시가 20거래일 지나면 쌓이기 시작합니다.</p>{% endif %}
 </section>
 
 <section class="card" id="forecast">
@@ -65,10 +79,10 @@
   {% set f = o.fc_live %}
   {% if f.n %}
   <div class="kv2">
-    <div><span>기록</span>{{ f.days }}일 · {{ f.n }}건</div>
-    <div><span>시초가 방향 적중</span>{{ ('%.0f%%' % f.hit) if f.hit is not none else '–' }}</div>
+    <div><span>기록</span>{{ f.days }}일 · {{ f.n }}건 <span class="muted small">(같은 날 종목들은 함께 움직여 정보량은 '일수'에 가깝습니다)</span></div>
+    <div><span>판정</span><b>{{ {'better': '기준선보다 나음', 'worse': '기준선보다 못함', 'same': '기준선과 차이 없음'}.get(f.verdict, '아직 표본이 적음') }}</b></div>
     <div><span>시초가 오차</span>{{ '%.2f' % f.mae_model }}% <span class="muted small">vs 어제 종가 그대로 {{ '%.2f' % f.mae_base }}%</span></div>
-    <div><span>종가가 보통 범위 안</span>{{ '%.0f%%' % f.range_cover }} <span class="muted small">(목표 68%)</span></div>
+    <div><span>종가가 보통 범위 안</span>{{ ('%.0f%%' % f.range_cover) if f.range_cover is not none else '–' }} <span class="muted small">(68%에 가까울수록 맞음)</span></div>
   </div>
   <p class="caveat">오차가 '어제 종가 그대로'보다 크면 해외 반영 부분은 도움이 안 된다는 뜻입니다. 그때는 범위만 보세요.</p>
   {% else %}<p class="empty">아직 기록이 없습니다. 관심 종목이 있으면 매일 아침 7:30·8:30에 저장되고, 그날 KRX 시세가 올라온 다음 날부터 비교됩니다.</p>{% endif %}

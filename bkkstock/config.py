@@ -26,6 +26,7 @@ KNOWN_KEYS = [
     "BACKUP_CMD",
     "INVESTOR_SCOPE",
     "KIS_RATE_PER_SEC",
+    "HC_PING_URL",
 ]
 
 _LINE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$")

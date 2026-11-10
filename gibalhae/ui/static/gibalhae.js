@@ -13,8 +13,9 @@ async function getJSON(url, opt) {
   if (!r.ok) throw new Error(d.error || r.statusText || String(r.status));
   return d;
 }
+const CSRF = document.querySelector('meta[name="csrf"]')?.content || "";
 const sendJSON = (url, method, body) => getJSON(url, {
-  method, headers: { "Content-Type": "application/json" }, body: body == null ? undefined : JSON.stringify(body),
+  method, headers: { "Content-Type": "application/json", "X-CSRF": CSRF }, body: body == null ? undefined : JSON.stringify(body),
 });
 let toastTimer = 0;
 function toast(msg, kind = "ok") {
@@ -38,12 +39,12 @@ async function loadOverview() {
   $("gb-jobs-badge").hidden = !overview.running; $("gb-jobs-badge").textContent = overview.running;
   const sel = $("gb-topic");
   sel.innerHTML = `<option value="">다음 소재(자동)</option>` + overview.topics.map((t) =>
-    `<option value="${t.n}"${t.used ? " disabled" : ""}>${t.n}. [${esc(t.series)}] ${esc(t.title)}${t.used ? " · " + esc(t.used) : ""}</option>`).join("");
+    `<option value="${esc(t.n)}"${t.used ? " disabled" : ""}>${esc(t.n)}. [${esc(t.series)}] ${esc(t.title)}${t.used ? " · " + esc(t.used) : ""}</option>`).join("");
   if (!overview.days.length) { $("gb-days").innerHTML = `<div class="adm-note">아직 만든 날이 없습니다. 「새 날짜 만들기」 또는 아침 예약 작업을 기다리세요.</div>`; return; }
   $("gb-days").innerHTML = overview.days.map((d) => `
-    <button type="button" class="gb-day${openDate === d.date ? " open" : ""}" data-date="${d.date}">
-      <div class="gb-day-l"><b>${d.date}</b><span class="gb-title">${esc(d.title || "(제목 없음)")}</span>
-        <span class="adm-note">${d.series ? "시리즈 " + esc(d.series) : ""}${d.topic ? " · 소재 " + d.topic : ""}</span></div>
+    <button type="button" class="gb-day${openDate === d.date ? " open" : ""}" data-date="${esc(d.date)}">
+      <div class="gb-day-l"><b>${esc(d.date)}</b><span class="gb-title">${esc(d.title || "(제목 없음)")}</span>
+        <span class="adm-note">${d.series ? "시리즈 " + esc(d.series) : ""}${d.topic ? " · 소재 " + esc(d.topic) : ""}</span></div>
       <div class="gb-day-r">
         <span class="gb-k">쇼츠</span>${badge(d.shorts && d.shorts.status)}${d.mp4 ? '<span class="gb-chip">mp4</span>' : ""}${d.shorts && d.shorts.youtube ? '<span class="gb-chip ok">유튜브</span>' : ""}
         <span class="gb-k">블로그</span>${badge(d.blog && d.blog.status)}${d.blog_bundle ? '<span class="gb-chip">묶음</span>' : ""}${d.blog && d.blog.url ? '<span class="gb-chip ok">올림</span>' : ""}
@@ -86,19 +87,19 @@ function renderDetail(d) {
   if (can(bs, "approved") && bi.blog_bundle) act.push(`<button class="adm-btn" data-act="published">네이버에 올린 주소 기록</button>`);
   act.push(`<button class="adm-btn sm" data-act="check">검수 다시</button>`);
 
-  const video = bi.mp4 ? `<video class="gb-video" controls playsinline preload="metadata" src="/api/gibalhae/content/${d.date}/build/shorts.mp4"></video>
-      <div class="adm-note">${s && s.meta.duration ? s.meta.duration + "초 · " : ""}${(bi.mp4_size / 1e6).toFixed(1)} MB${bi.j2v ? " · JSON2Video " + esc(bi.j2v.project || "") : ""}
-      ${bi.j2v && bi.j2v.url ? ` · <a href="${esc(bi.j2v.url)}" target="_blank" rel="noopener">원본</a>` : ""} · <a href="/api/gibalhae/content/${d.date}/build/shorts.mp4" download>내려받기</a></div>`
+  const video = bi.mp4 ? `<video class="gb-video" controls playsinline preload="metadata" src="/api/gibalhae/content/${esc(d.date)}/build/shorts.mp4"></video>
+      <div class="adm-note">${s && s.meta.duration ? esc(s.meta.duration) + "초 · " : ""}${(bi.mp4_size / 1e6).toFixed(1)} MB${bi.j2v ? " · JSON2Video " + esc(bi.j2v.project || "") : ""}
+      ${bi.j2v && /^https?:\/\//.test(bi.j2v.url || "") ? ` · <a href="${esc(bi.j2v.url)}" target="_blank" rel="noopener">원본</a>` : ""} · <a href="/api/gibalhae/content/${esc(d.date)}/build/shorts.mp4" download>내려받기</a></div>`
     : `<div class="gb-empty">${ss === "approved" ? "승인됐습니다. 「영상 만들기」를 누르세요 (1~3분)" : ss === "draft" ? "승인하면 만들 수 있습니다" : "영상 없음"}</div>`;
-  const imgs = (bi.blog_images || []).map((p) => `<a href="/api/gibalhae/content/${d.date}/build/${p}" target="_blank"><img src="/api/gibalhae/content/${d.date}/build/${p}" alt=""></a>`).join("");
+  const imgs = (bi.blog_images || []).map((p) => `<a href="/api/gibalhae/content/${esc(d.date)}/build/${esc(p)}" target="_blank"><img src="/api/gibalhae/content/${esc(d.date)}/build/${esc(p)}" alt=""></a>`).join("");
   const bundle = bi.blog_bundle ? `<div class="gb-bundle"><b>네이버 붙여넣기 묶음</b> —
-      <a href="/api/gibalhae/content/${d.date}/build/blog/CHECKLIST.md" target="_blank">순서(CHECKLIST)</a> ·
-      <a href="/api/gibalhae/content/${d.date}/build/blog/post.txt" target="_blank">본문(post.txt)</a> ·
-      <a href="/api/gibalhae/content/${d.date}/build/blog/post.html" target="_blank">HTML</a><div class="gb-imgs">${imgs}</div></div>` : "";
+      <a href="/api/gibalhae/content/${esc(d.date)}/build/blog/CHECKLIST.md" target="_blank">순서(CHECKLIST)</a> ·
+      <a href="/api/gibalhae/content/${esc(d.date)}/build/blog/post.txt" target="_blank">본문(post.txt)</a> ·
+      <a href="/api/gibalhae/content/${esc(d.date)}/build/blog/post.html" target="_blank">HTML</a><div class="gb-imgs">${imgs}</div></div>` : "";
 
   $("gb-detail").hidden = false;
   $("gb-detail").innerHTML = `
-    <div class="adm-sec-head"><h2>${d.date} · ${esc((s || b || {}).title || "")}</h2>
+    <div class="adm-sec-head"><h2>${esc(d.date)} · ${esc((s || b || {}).title || "")}</h2>
       <span class="adm-note">쇼츠 ${badge(ss)} 블로그 ${badge(bs)}</span></div>
     <div class="gb-actions" id="gb-actions">${act.join("")}</div>
     <div class="gb-cols">

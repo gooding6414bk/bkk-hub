@@ -13,6 +13,8 @@ from __future__ import annotations
 import datetime as dt
 import gzip
 import json
+import logging
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -20,6 +22,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
+
+log = logging.getLogger("bkkstock.store")
 
 from .timeutil import iso_kst
 
@@ -85,6 +89,13 @@ CREATE TABLE IF NOT EXISTS news_cache (
 CREATE TABLE IF NOT EXISTS key_changes (
   at TEXT NOT NULL, api TEXT NOT NULL, keys TEXT NOT NULL, source TEXT
 );
+CREATE TABLE IF NOT EXISTS login_fails (
+  at REAL NOT NULL,              -- unix 초
+  ip TEXT,
+  device TEXT                    -- 전에 로그인했던 기기면 그 기기 표식, 아니면 NULL
+);
+CREATE INDEX IF NOT EXISTS login_fails_at ON login_fails(at);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 _SAFE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -166,28 +177,57 @@ class Store:
         if "collected_at" not in df.columns:
             df["collected_at"] = iso_kst()
         p = self._versioned(base, day.isoformat(), ".parquet")
-        df.to_parquet(p, index=False)
+        # 임시 파일에 다 쓴 뒤 이름을 바꾼다 — 쓰는 도중 죽어도 잘린 파일이 '그날 최신본'이 되지 않게
+        tmp = p.with_name(p.name + ".tmp")
+        df.to_parquet(tmp, index=False)
+        os.replace(tmp, p)
         return p
 
-    def _latest_file(self, table: str, day: dt.date) -> Path | None:
+    def _version_files(self, table: str, day: dt.date) -> list[Path]:
+        """그날 파일들, 최신 버전부터."""
         base = self.clean_dir / table
         if not base.exists():
-            return None
+            return []
         files = list(base.glob(f"{day.isoformat()}.parquet")) + list(base.glob(f"{day.isoformat()}.v*.parquet"))
-        if not files:
-            return None
 
         def ver(p: Path) -> int:
             m = re.search(r"\.v(\d+)\.parquet$", p.name)
             return int(m.group(1)) if m else 1
 
-        return max(files, key=ver)
+        return sorted(files, key=ver, reverse=True)
 
-    def read_clean(self, table: str, day: dt.date) -> pd.DataFrame | None:
-        p = self._latest_file(table, day)
-        if p is None:
-            return None
-        return pd.read_parquet(p)
+    def _latest_file(self, table: str, day: dt.date) -> Path | None:
+        files = self._version_files(table, day)
+        return files[0] if files else None
+
+    @staticmethod
+    def _read_parquet(p: Path, columns=None, codes=None) -> pd.DataFrame:
+        import pyarrow.parquet as pq
+        cols = None
+        names: list[str] = []
+        if columns is not None or codes is not None:
+            names = pq.read_schema(p).names
+        if columns is not None:
+            want = [c for c in names if columns(c)] if callable(columns) else [c for c in columns if c in names]
+            cols = want
+        if codes is not None and "code" in names:
+            codes = [str(c) for c in codes]
+            try:
+                return pd.read_parquet(p, columns=cols, filters=[("code", "in", codes)])
+            except Exception:  # noqa: BLE001 — 열 형식이 달라 필터가 안 먹으면 읽은 뒤 거른다
+                df = pd.read_parquet(p, columns=cols)
+                return df[df["code"].astype(str).isin(codes)].reset_index(drop=True)
+        return pd.read_parquet(p, columns=cols)
+
+    def read_clean(self, table: str, day: dt.date, columns=None, codes=None) -> pd.DataFrame | None:
+        """그날 최신 버전. columns: 읽을 열 목록(없는 열은 건너뜀) 또는 열 이름을 받는 함수.
+        codes: 이 종목들만 (parquet 필터 — 메모리를 크게 줄인다). 최신 버전이 깨져 있으면 이전 버전을 읽는다."""
+        for p in self._version_files(table, day):
+            try:
+                return self._read_parquet(p, columns, codes)
+            except Exception as e:  # noqa: BLE001
+                log.warning("깨진 정리본 건너뜀 %s: %s", p.name, e)
+        return None
 
     def clean_days(self, table: str) -> list[dt.date]:
         base = self.clean_dir / table
@@ -205,10 +245,10 @@ class Store:
         days = self.clean_days(table)
         return days[-1] if days else None
 
-    def read_range(self, table: str, days: Iterable[dt.date]) -> pd.DataFrame:
+    def read_range(self, table: str, days: Iterable[dt.date], columns=None, codes=None) -> pd.DataFrame:
         frames = []
         for d in days:
-            df = self.read_clean(table, d)
+            df = self.read_clean(table, d, columns=columns, codes=codes)
             if df is not None and len(df):
                 frames.append(df)
         if not frames:
@@ -306,6 +346,58 @@ class Store:
     def mark_sent(self, alert_id: int) -> None:
         with self.db() as con:
             con.execute("UPDATE alerts SET sent=1 WHERE id=?", (alert_id,))
+
+    # ---------- 작은 설정값 ----------
+    def meta_get(self, key: str) -> str | None:
+        rows = self.query("SELECT value FROM meta WHERE key=?", (key,))
+        return rows[0]["value"] if rows else None
+
+    def meta_set(self, key: str, value: str) -> None:
+        with self.db() as con:
+            con.execute("INSERT INTO meta(key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                        (key, value))
+
+    def retag_disclosures(self, classify, version: str) -> int:
+        """분류 규칙이 바뀌었으면 저장된 공시의 분류만 다시 매긴다 (처음 본 시각 등 나머지는 그대로)."""
+        if self.meta_get("classify_version") == version:
+            return 0
+        n = 0
+        with self.db() as con:
+            for r in con.execute("SELECT rcept_no, report_nm, tags FROM disclosures").fetchall():
+                tags = ",".join(classify(r["report_nm"] or ""))
+                if tags != (r["tags"] or ""):
+                    con.execute("UPDATE disclosures SET tags=? WHERE rcept_no=?", (tags, r["rcept_no"]))
+                    n += 1
+        self.meta_set("classify_version", version)
+        return n
+
+    # ---------- 로그인 실패 (재시작해도 남게 sqlite에) ----------
+    def login_fail(self, at: float, ip: str, device: str | None) -> None:
+        with self.db() as con:
+            con.execute("INSERT INTO login_fails(at, ip, device) VALUES (?,?,?)", (at, ip, device))
+            con.execute("DELETE FROM login_fails WHERE at < ?", (at - 7 * 86400,))
+
+    def login_fail_count(self, since: float, *, ip: str | None = None, device: str | None = None,
+                         unknown_devices: bool = False) -> int:
+        sql, args = "SELECT COUNT(*) AS n FROM login_fails WHERE at >= ?", [since]
+        if ip is not None:
+            sql += " AND ip = ? AND device IS NULL"
+            args.append(ip)
+        if device is not None:
+            sql += " AND device = ?"
+            args.append(device)
+        if unknown_devices:
+            sql += " AND device IS NULL"
+        return int(self.query(sql, args)[0]["n"])
+
+    def clear_login_fails(self) -> int:
+        with self.db() as con:
+            return con.execute("DELETE FROM login_fails").rowcount
+
+    def login_fail_summary(self, since: float) -> dict:
+        rows = self.query("SELECT at, ip FROM login_fails WHERE at >= ? ORDER BY at DESC", (since,))
+        return {"n": len(rows), "last_at": rows[0]["at"] if rows else None, "last_ip": rows[0]["ip"] if rows else None,
+                "ips": len({r["ip"] for r in rows})}
 
     # ---------- watchlist ----------
     def watchlist(self) -> list[dict]:

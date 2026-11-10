@@ -100,7 +100,7 @@ def test_full_daily_run(ctx, monkeypatch):
     ctx.store.upsert_watch("086520", "에코프로", "보유", 10, 80000, "")
     res = daily.run(ctx, DAY)
     items = res["items"]
-    assert res["status"] == "ok", items
+    assert res["status"] == "ok", {k: (v["status"], v["message"][:80]) for k, v in items.items() if v["status"] != "ok"}
     assert items["universe"]["count"] == 3                       # ETF 제외 주권 3종목
     assert items["krx_prices"]["count"] == 3
     assert items["nxt_prices"]["count"] == 1

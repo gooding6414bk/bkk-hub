@@ -45,9 +45,12 @@ def sync(src: Path = REPO_CONTENT, dst: Path | None = None) -> list[str]:
     except (OSError, ValueError):
         manifest = {}
     changed: list[str] = []
-    for day in sorted(p for p in src.iterdir() if p.is_dir() and (DATE.match(p.name) or p.name == "_example")):
+    root = src.resolve()
+    for day in sorted(p for p in src.iterdir()
+                      if p.is_dir() and not p.is_symlink() and (DATE.match(p.name) or p.name == "_example")):
         for f in day.rglob("*"):
-            if not f.is_file():
+            # 심볼릭 링크는 따라가지 않는다 (저장소에 넣은 링크로 서버의 .env 같은 파일을 화면 경로로 끌어오지 못하게)
+            if f.is_symlink() or not f.is_file() or not f.resolve().is_relative_to(root):
                 continue
             rel = str(f.relative_to(src))
             out = dst / rel

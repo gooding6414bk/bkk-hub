@@ -119,7 +119,8 @@ def _gap_world(store, beta_true=0.8, gamma_true=0.4, n_days=70, seed=1):
         if d.weekday() < 5:
             us[d] = float(rng.normal(0, 0.015))
         d += dt.timedelta(days=1)
-    store.write_clean("overseas", days[-1], _ov(us).assign(open=lambda x: x["close"]))
+    ov = _ov(us)
+    store.write_clean("overseas", days[-1], ov.assign(open=ov["close"].shift(1).fillna(ov["close"])))
     close = {c: 10000.0 for c in codes}
     nxt_after = {c: 0.0 for c in codes}
     for i, t in enumerate(days):
@@ -150,7 +151,8 @@ def test_forecast_recovers_beta_gamma_and_beats_baseline(store):
     assert fc["target"] == dt.date(2026, 11, 9)                   # 금요일 다음 거래일 = 월요일
     assert fc["lo1"] < fc["center"] < fc["hi1"] and fc["lo2"] < fc["lo1"]
     bt = fc["bt"]
-    assert bt["n"] >= 20 and bt["mae_model"] < bt["mae_base"] and bt["hit"] > 70
+    assert bt["n"] >= 20 and bt["mae_model"] < bt["mae_base"] and bt["verdict"] == "better"
+    assert "hit" not in bt                          # 방향 적중률은 기준선 없이 좋아 보여서 내지 않는다
 
 
 def test_backtest_has_no_lookahead(store):
@@ -185,3 +187,16 @@ def test_market_overview_counts(store):
     assert mk["up"] >= 1 and mk["down"] >= 1 and mk["limit_up"] == 1
     assert mk["top_up"][0]["code"] == "000001"
     assert mk["new_high"] >= 1
+
+
+def test_ewy_uses_us_session_open_to_close():
+    """한국 낮 장과 겹치는 부분(전날 미국 종가 → 오늘 미국 시가)은 빼고 미국장 시가→종가만 쓴다."""
+    fri, mon = dt.date(2026, 11, 6), dt.date(2026, 11, 9)
+    ov = pd.DataFrame([{"symbol": "EWY", "date": dt.date(2026, 11, 5), "open": 100.0, "close": 100.0},
+                       {"symbol": "EWY", "date": fri, "open": 103.0, "close": 104.03}])   # 갭 +3%(한국 장 반영), 장중 +1%
+    done = dt.datetime(2100, 1, 1, tzinfo=dt.timezone.utc)
+    assert forecast.overnight(ov, "EWY", fri, mon, done) == pytest.approx(0.01)
+
+
+def test_tick_rounding():
+    assert forecast.tick_round(3364.0) == 3365.0 and forecast.tick_round(71234.0) == 71200.0

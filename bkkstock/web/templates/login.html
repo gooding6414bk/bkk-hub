@@ -3,7 +3,8 @@
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
-<meta name="theme-color" content="#2f5bea">
+<meta name="theme-color" content="#2f5bea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14171c" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,7 +14,6 @@
 <body class="login-page">
 <form class="login card" method="post">
   <div class="brand big">건우<b>주식</b></div>
-  <p class="muted small" style="text-align:center;margin:-6px 0 6px">📈 주식 · 🎬 영상</p>
   {% if demo %}<p class="demo inline">샘플 데이터 화면</p>{% endif %}
   {% if not has_pw %}
     <p class="warnbox">아직 대시보드 비밀번호가 없습니다. 서버에서 <code>deploy/install.sh</code>를 실행하면 만들어집니다.</p>

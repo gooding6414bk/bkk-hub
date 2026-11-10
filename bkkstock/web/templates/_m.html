@@ -1,14 +1,33 @@
-{% macro grade(o_score, o_grade, o_arrow, blocked, enough=True) -%}
-{%- set cls = 'g-block' if blocked else ('g-none' if not enough or o_score is none else ('g-good' if o_score >= 20 else 'g-ok' if o_score >= 5 else 'g-mid' if o_score > -5 else 'g-weak' if o_score > -20 else 'g-bad')) -%}
-<span class="grade {{ cls }}" title="참고 점수 (검증 전)"><i>{{ o_arrow or '·' }}</i>{{ o_grade or '이력 부족' }}{% if o_score is not none and enough %}<em>{{ '%+.0f' % o_score }}</em>{% endif %}</span>
+{#- 참고 점수: 화살표·숫자 없이 등급 글자만 (방향 신호처럼 읽히지 않게). 매수 금지는 점수와 별개의 규칙이라 따로 보인다.
+    '주의'라는 낱말은 회피 엔진 경고에만 쓴다 (2026-11 내부 점검). -#}
+{% macro grade_name(score) -%}
+{%- if score is none -%}이력 부족{%- elif score >= 20 -%}양호{%- elif score >= 5 -%}약간 양호{%- elif score > -5 -%}중립{%- elif score > -20 -%}약간 불리{%- else -%}불리{%- endif -%}
 {%- endmacro %}
+{% macro grade(score, blocked, enough=True, show_num=False) -%}
+{%- if blocked -%}<span class="grade g-block">⛔ 매수 금지</span>
+{%- elif not enough or score is none -%}<span class="grade g-none">이력 부족</span>
+{%- else -%}{%- set cls = 'g-good' if score >= 20 else 'g-ok' if score >= 5 else 'g-mid' if score > -5 else 'g-weak' if score > -20 else 'g-bad' -%}
+<span class="grade {{ cls }}">{{ grade_name(score) }}{% if show_num %} <b>{{ '%+.0f' % score }}</b>{% endif %}<em>검증 전</em></span>
+{%- endif -%}
+{%- endmacro %}
+{#- 위험 칩: 색만으로 구분하지 않게 늘 아이콘을 붙인다 (⛔ 매수 금지급, ⚠ 주의급) -#}
+{% macro chip(f) -%}<span class="chip {{ f.level }}" title="{{ f.text }}">{{ '⛔' if f.level == 'block' else '⚠' }} {{ f.kind }}</span>{%- endmacro %}
 {% macro flags(fl, limit=3) -%}
-{%- for f in fl if f.level in ('block', 'warn') -%}{% if loop.index <= limit %}<span class="chip {{ f.level }}" title="{{ f.text }}">{{ f.kind }}</span>{% endif %}{%- endfor -%}
-{%- set extra = (fl | selectattr('level', 'in', ['block', 'warn']) | list | length) - limit -%}
-{%- if extra > 0 %}<span class="chip more">+{{ extra }}</span>{% endif -%}
+{%- set shown = fl | selectattr('level', 'in', ['block', 'warn']) | list -%}
+{%- for f in shown -%}{% if loop.index <= limit %}{{ chip(f) }}{% endif %}{%- endfor -%}
+{%- if shown | length > limit %}<span class="chip more">+{{ shown | length - limit }}</span>{% endif -%}
 {%- endmacro %}
+{#- 등락: 색 + ▲▼ 모양 (색약·햇빛 아래에서도 읽히게) -#}
 {% macro chg(v) -%}
-{%- if v is none -%}<span class="muted">–</span>{%- else -%}<span class="{{ 'up' if v > 0 else 'down' if v < 0 else 'flat' }}">{{ '%+.2f' % v }}%</span>{%- endif -%}
+{%- if v is none -%}<span class="muted">–</span>
+{%- elif v > 0.004 -%}<span class="up">▲{{ '%.2f' % v }}%</span>
+{%- elif v < -0.004 -%}<span class="down">▼{{ '%.2f' % (-v) }}%</span>
+{%- else -%}<span class="flat">0.00%</span>{%- endif -%}
+{%- endmacro %}
+{% macro won(v, sign=True) -%}
+{%- if v is none -%}<span class="muted">–</span>
+{%- elif v | round(0) == 0 -%}<span class="flat">0원</span>
+{%- else -%}<span class="{{ 'up' if v > 0 else 'down' }}">{{ ('{:+,.0f}' if sign else '{:,.0f}').format(v) }}원</span>{%- endif -%}
 {%- endmacro %}
 {% macro dot(state) -%}<span class="dot {{ state }}" aria-hidden="true"></span>{%- endmacro %}
 {% macro st(s) -%}

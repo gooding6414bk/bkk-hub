@@ -113,7 +113,7 @@
         const t = TONE[n.tone] || TONE.neutral;
         const why = (n.words || []).length ? `<span class="why">근거: ${n.words.map(esc).join(", ")}</span>` : "";
         const dup = n.dupes ? `<span class="muted small"> · 같은 소식 ${n.dupes}건 더</span>` : "";
-        return `<div class="news-item"><span class="chip ${t[1]}">${t[0]}</span> <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>
+        return `<div class="news-item"><span class="chip ${t[1]}">${t[0]}</span> ${/^https?:\/\//i.test(n.link || "") ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : esc(n.title)}
           <div class="meta">${esc(n.source || "")} · ${esc((n.published || "").replace("T", " ").slice(0, 16))}${dup} ${why}</div></div>`;
       }).join("");
       const src = r.source === "naver" ? "네이버 검색 API" : r.source === "demo" ? "샘플" : "구글 뉴스 RSS";
@@ -156,6 +156,7 @@
 
   // ---------- 작업 실행 ----------
   $$("[data-job]").forEach((b) => b.addEventListener("click", async () => {
+    if (b.dataset.confirm && !confirm(b.dataset.confirm)) return;
     b.disabled = true;
     try { const r = await call("POST", `/api/jobs/${b.dataset.job}`); toast(r.message, !r.ok); }
     catch (err) { toast(err.message, true); }
