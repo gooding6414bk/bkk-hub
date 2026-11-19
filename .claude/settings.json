@@ -1,0 +1,22 @@
+{
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "agent-skills@addy-agent-skills": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail",
+        "ref": "v5.3.3"
+      }
+    },
+    "addy-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "addyosmani/agent-skills",
+        "ref": "0.6.17"
+      }
+    }
+  }
+}
