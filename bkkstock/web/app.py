@@ -353,7 +353,9 @@ def register_routes(app: Flask) -> None:
 
     @app.get("/stocks")
     def stocks():
-        return page("stocks.html", rows=data.watch_rows(ctx()), day=data.ref_day(ctx()))
+        live: dict = {}
+        rows = data.watch_rows(ctx(), live)
+        return page("stocks.html", rows=rows, day=data.ref_day(ctx()), live=live)
 
     @app.get("/stocks/<code>")
     def stock(code: str):

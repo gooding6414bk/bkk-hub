@@ -109,10 +109,11 @@ class KisClient:
         return data["access_token"]
 
     # ---------- 호출 ----------
-    def _get(self, path: str, tr_id: str, params: dict[str, str], tr_cont: str = "") -> tuple[dict, str]:
+    def _get(self, path: str, tr_id: str, params: dict[str, str], tr_cont: str = "",
+             attempts: int = 4, timeout: float | None = None) -> tuple[dict, str]:
         token = self.token()
         retried_token = False
-        for attempt in range(4):
+        for attempt in range(attempts):
             self.limiter.wait()
             headers = {
                 "content-type": "application/json; charset=utf-8",
@@ -124,9 +125,10 @@ class KisClient:
                 "tr_cont": tr_cont,
             }
             try:
-                r = self.http.get(f"{BASE_URL}{path}", headers=headers, params=params)
+                r = self.http.get(f"{BASE_URL}{path}", headers=headers, params=params,
+                                  **({"timeout": timeout} if timeout else {}))
             except httpx.HTTPError as e:
-                if attempt < 3:
+                if attempt < attempts - 1:
                     time.sleep(1 + attempt)
                     continue
                 self.store.api_mark(self.api, False, f"연결 오류: {e}")
@@ -153,9 +155,11 @@ class KisClient:
         raise ApiError(self.api, "rate_limit", "초당 호출 제한이 계속됩니다", retryable=True)
 
     # ---------- 조회 ----------
-    def inquire_price(self, code: str, market: str = "J") -> dict:
+    def inquire_price(self, code: str, market: str = "J", quick: bool = False) -> dict:
+        """현재가. quick=True 는 화면용 — 짧게 기다리고 덜 재시도한다(새로고침이 오래 멈추지 않게)."""
         body, _ = self._get("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
-                            {"FID_COND_MRKT_DIV_CODE": market, "FID_INPUT_ISCD": code})
+                            {"FID_COND_MRKT_DIV_CODE": market, "FID_INPUT_ISCD": code},
+                            **({"attempts": 2, "timeout": 5.0} if quick else {}))
         return body.get("output") or {}
 
     def daily_chart(self, code: str, start: dt.date, end: dt.date, market: str = "J",

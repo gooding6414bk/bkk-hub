@@ -34,3 +34,12 @@
 {%- set m = {'ok': ('ok', '정상'), 'warn': ('warn', '경고'), 'fail': ('fail', '실패'), 'skip': ('skip', '미설정'), 'partial': ('warn', '일부 실패'), 'running': ('run', '진행 중'), 'skipped': ('skip', '휴장'), 'pending': ('run', '아침에')} -%}
 {%- set v = m.get(s, ('none', '없음')) -%}<span class="st {{ v[0] }}">{{ v[1] }}</span>
 {%- endmacro %}
+
+{% macro live_note(l) -%}
+<p class="muted small live-note">
+{%- if l.live_at %}현재가 {{ l.live_at }} 조회{% if l.live_n is defined and l.live_n < l.watch_n %} · {{ l.watch_n - l.live_n }}종목은 종가{% endif %} · <a href="" class="pill">↻ 새로고침</a>
+{%- elif l.live_on %}현재가를 받지 못해 종가로 보입니다. <a href="" class="pill">↻ 새로고침</a>
+{%- else %}한국투자증권 키가 없어 종가로 보입니다 (<a href="/apis">API 관리</a>).{% endif %}
+{%- if l.live_error %}<br><span class="t-warn">현재가 조회 오류: {{ l.live_error }}</span>{% endif %}
+</p>
+{%- endmacro %}

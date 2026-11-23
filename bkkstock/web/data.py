@@ -90,7 +90,73 @@ def _flags(row: dict | None) -> list[dict]:
         return []
 
 
-def watch_rows(ctx: Ctx) -> list[dict]:
+# ---------- 현재가 (새로고침할 때 한국투자증권에서 조회만. 주문 없음) ----------
+LIVE_TTL = 20            # 초. 20초 안에 다시 열면 받아 둔 값을 쓴다 (호출 수 제한)
+LIVE_MAX = 40            # 한 번에 조회할 최대 종목 수
+LIVE_BUDGET = 8.0        # 초. 이보다 오래 걸리면 나머지는 종가로 보인다
+_live_cache: dict = {}   # code -> (받은 시각 time.time(), 값)
+_live_state: dict = {"market": "UN", "error": None, "error_t": 0.0}
+
+
+def _quote(out: dict, at: dt.datetime, market: str = "UN") -> dict | None:
+    price = _num(out.get("stck_prpr"))
+    if not price:
+        return None
+    return {"price": price, "change_pct": _num(out.get("prdy_ctrt")), "change": _num(out.get("prdy_vrss")),
+            "open": _num(out.get("stck_oprc")), "high": _num(out.get("stck_hgpr")), "low": _num(out.get("stck_lwpr")),
+            "volume": _num(out.get("acml_vol")), "value": _num(out.get("acml_tr_pbmn")),
+            "at": at.strftime("%m/%d %H:%M:%S"), "src": "KRX+넥스트레이드" if market == "UN" else "KRX"}
+
+
+def live_quotes(ctx: Ctx, codes: list[str]) -> dict:
+    """{'quotes': {code: 값}, 'error': 문구 또는 None, 'on': 키가 있는지}.
+    통합(KRX+넥스트레이드) 현재가를 먼저 묻고, 안 되면 KRX 현재가로."""
+    if ctx.settings.demo or not (ctx.settings.get("KIS_APP_KEY") and ctx.settings.get("KIS_APP_SECRET")):
+        return {"quotes": {}, "error": None, "on": False}
+    now = time.time()
+    quotes, error = {}, None
+    # 방금 실패했으면(연결 안 됨 등) 30초 동안은 다시 묻지 않는다 — 화면이 매번 멈추지 않게
+    if _live_state["error"] and now - _live_state["error_t"] < 30:
+        error = _live_state["error"]
+    started = time.monotonic()
+    for code in list(dict.fromkeys(codes))[:LIVE_MAX]:
+        hit = _live_cache.get(code)
+        if hit and now - hit[0] < LIVE_TTL:
+            quotes[code] = hit[1]
+            continue
+        if error or time.monotonic() - started > LIVE_BUDGET:
+            if hit:
+                quotes[code] = hit[1]     # 조금 지난 값이라도 받은 시각과 함께 보인다
+            continue
+        try:
+            try:
+                out = ctx.kis.inquire_price(code, _live_state["market"], quick=True)
+            except ApiError as e:
+                if _live_state["market"] != "UN" or e.code in ("network", "rate_limit", "not_configured", "token_wait"):
+                    raise
+                _live_state["market"] = "J"          # 통합 시세를 안 주면 KRX 현재가로
+                out = ctx.kis.inquire_price(code, "J", quick=True)
+            q = _quote(out, now_kst(), _live_state["market"])
+        except ApiError as e:
+            error = str(e)
+            _live_state.update(error=error, error_t=time.time())
+            if hit:
+                quotes[code] = hit[1]
+            continue
+        except Exception as e:  # noqa: BLE001
+            error = f"현재가 조회 실패: {type(e).__name__}"
+            _live_state.update(error=error, error_t=time.time())
+            continue
+        if q:
+            _live_cache[code] = (time.time(), q)
+            quotes[code] = q
+    if not error:
+        _live_state["error"] = None
+    return {"quotes": quotes, "error": error, "on": True}
+
+
+def watch_rows(ctx: Ctx, meta: dict | None = None) -> list[dict]:
+    """meta 를 주면 현재가 상태(live_on, live_error, live_at)를 채운다."""
     day = ref_day(ctx)
     out_df = _outlook_df(ctx, day)
     watch = ctx.store.watchlist()
@@ -111,12 +177,20 @@ def watch_rows(ctx: Ctx) -> list[dict]:
         for r in ctx.store.query(f"SELECT * FROM disclosures WHERE stock_code IN ({qs}) ORDER BY rcept_dt DESC, rcept_no DESC",
                                  [w["code"] for w in watch]):
             last_disc.setdefault(r["stock_code"], r)
+    live = live_quotes(ctx, [w["code"] for w in watch]) if watch else {"quotes": {}, "error": None, "on": False}
+    if meta is not None:
+        ats = sorted(q["at"] for q in live["quotes"].values())
+        meta.update(live_on=live["on"], live_error=live["error"], live_at=ats[-1] if ats else None,
+                    live_n=len(live["quotes"]), watch_n=len(watch))
     rows = []
     for w in watch:
         o = by_code.get(w["code"])
         p = pmap.get(w["code"], {})
         close = _num(p.get("close"))
         chg = _num(p.get("change_pct"))
+        q = live["quotes"].get(w["code"])
+        if q:                                   # 현재가가 있으면 그것으로 (손익·큰 하락 판정도 현재가 기준)
+            close, chg = q["price"], q["change_pct"]
         pnl = None
         if close and w.get("qty") and w.get("avg_price"):
             pnl = (close - w["avg_price"]) * w["qty"]
@@ -127,7 +201,8 @@ def watch_rows(ctx: Ctx) -> list[dict]:
             "arrow": o.get("arrow") if o else "·", "blocked": bool(o.get("blocked")) if o else False,
             "enough": bool(o.get("enough_history")) if o else False,
             "ret20": o.get("ret20") if o else None, "flags": _flags(o),
-            "last_disc": last_disc.get(w["code"]),
+            "last_disc": last_disc.get(w["code"]), "live_at": q["at"] if q else None,
+            "krx_close": _num(p.get("close")),
             "value_now": close * w["qty"] if close and w.get("qty") else None,
             "pnl_today": (close * w["qty"] * (chg / (100 + chg))) if close and w.get("qty") and chg is not None else None,
         })
@@ -235,7 +310,8 @@ def dashboard(ctx: Ctx) -> dict:
         """SELECT * FROM disclosures WHERE tags != '' AND (tags LIKE '%희석%' OR tags LIKE '%부실%' OR tags LIKE '%매도압력%')
            AND stock_code != '' ORDER BY first_seen_at DESC LIMIT 15""")
     apis = api_cards(ctx)
-    watch = watch_rows(ctx)
+    live: dict = {}
+    watch = watch_rows(ctx, live)
     own = [w for w in watch if w.get("kind") == "보유" and w.get("value_now")]
     totals = None
     if own:
@@ -256,7 +332,7 @@ def dashboard(ctx: Ctx) -> dict:
         "api_ok": sum(1 for a in apis if a["state"] == "ok"),
         "api_bad": sum(1 for a in apis if a["state"] == "fail"),
         "api_missing": sum(1 for a in apis if a["state"] == "missing" and not a.get("optional")),
-        "n_scored": len(out_df),
+        "n_scored": len(out_df), "live": live,
     }
 
 
@@ -451,6 +527,10 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
     if last_px.get("close") and last_px.get("change_pct") is not None:
         c = last_px["close"]
         chg_won = c - c / (1 + last_px["change_pct"] / 100)
+    live = live_quotes(ctx, [code])
+    q = live["quotes"].get(code)
+    if q:
+        chg_won = q["change"]
     return {"code": code, "name": name, "day": day, "o": o, "flags": flags, "blocked": blocked,
             "block_flags": [f for f in flags if f["level"] == "block"], "warn_flags": [f for f in flags if f["level"] == "warn"],
             "risk_disc": risk_disc, "fc_state": fc_state, "chg_won": chg_won,
@@ -459,7 +539,8 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
             "px": last_px, "stats": stats, "market": market, "flow": flow, "flow_chart": flow_chart, "sc": sc,
             "discs": discs[:25], "disc_sum": disc_sum, "disc_bar": charts.tone_bar(disc_sum["ratio"]),
             "score_spark": charts.sparkline(hist_scores, 160, 36), "n_score_days": len(hist_scores), "comps": comps,
-            "watch": watch, "model": outlook.MODEL_VERSION, "fc": fc, "fc_model": fcmod.MODEL_VERSION}
+            "watch": watch, "model": outlook.MODEL_VERSION, "fc": fc, "fc_model": fcmod.MODEL_VERSION,
+            "live": q, "live_on": live["on"], "live_error": live["error"]}
 
 
 def _next_day(ymd: str | None) -> str:

@@ -182,3 +182,88 @@ def test_gibalhae_sync_keeps_server_edits_but_follows_untouched_files(tmp_path):
     assert sorted(sync(src, dst)) == ["2026-11-08/new.png", "2026-11-08/shorts.md"]
     assert (dst / "2026-11-08" / "blog.md").read_text() == "status: approved (서버)"      # 서버 편집 유지
     assert (dst / "2026-11-08" / "shorts.md").read_text() == "status: approved (저장소)"  # 손대지 않은 파일은 따라감
+
+
+def _live_setup(client, monkeypatch, handler):
+    import datetime as dt
+    import httpx
+    from bkkstock.timeutil import trading_days_back
+    from bkkstock.web import data as datamod
+    from tests.conftest import make_prices
+    c, appmod = client
+    cx = appmod.ctx()
+    days = trading_days_back(dt.date(2026, 11, 6), 30)
+    make_prices(cx.store, days, ["000001", "000002"])
+    cx.store.upsert_watch("000001", "종목000001", "보유", 10, 9000, "")
+    cx.store.upsert_watch("000002", "종목000002", "관심", None, None, "")
+    cx.settings.values.update(KIS_APP_KEY="APPKEY123456", KIS_APP_SECRET="SECRET")
+    cx.kis.http = httpx.Client(transport=httpx.MockTransport(handler))
+    datamod._live_cache.clear()
+    datamod._live_state.update(market="UN", error=None, error_t=0.0)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    login(c)
+    return c, cx, datamod
+
+
+def _kis_handler(calls, reject_un=False, fail=False):
+    import httpx
+
+    def handler(req: httpx.Request):
+        if req.url.path == "/oauth2/tokenP":
+            return httpx.Response(200, json={"access_token": "T", "access_token_token_expired": "2099-01-01 00:00:00"})
+        if fail:
+            raise httpx.ConnectError("down")
+        mkt = req.url.params["FID_COND_MRKT_DIV_CODE"]
+        calls.append((req.url.params["FID_INPUT_ISCD"], mkt))
+        assert req.headers["tr_id"] == "FHKST01010100"          # 조회(현재가)만 — 주문 tr_id 아님
+        if reject_un and mkt == "UN":
+            return httpx.Response(200, json={"rt_cd": "1", "msg_cd": "OPSQ0001", "msg1": "시장 코드 오류"})
+        return httpx.Response(200, json={"rt_cd": "0", "output": {
+            "stck_prpr": "12345", "prdy_ctrt": "-2.50", "prdy_vrss": "-316", "stck_oprc": "12600",
+            "stck_hgpr": "12700", "stck_lwpr": "12300", "acml_vol": "1000", "acml_tr_pbmn": "12345000000"}})
+    return handler
+
+
+def test_refresh_shows_live_price_and_caches(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls))
+    home = c.get("/").get_data(as_text=True)
+    assert "12,345" in home and "현재가" in home and "새로고침" in home
+    assert sorted(calls) == [("000001", "UN"), ("000002", "UN")]
+    # 보유 손익도 현재가 기준: (12345 - 9000) × 10
+    assert "33,450" in home
+    c.get("/stocks")                                              # 20초 안 → 다시 묻지 않는다
+    assert len(calls) == 2
+    t0 = datamod.time.time()
+    monkeypatch.setattr(datamod.time, "time", lambda: t0 + datamod.LIVE_TTL + 1)
+    page = c.get("/stocks/000001").get_data(as_text=True)         # 새로고침 = 새로 조회
+    assert len(calls) == 3
+    assert "12,345" in page and "KRX+넥스트레이드" in page and "고가 12,700" in page
+
+
+def test_live_price_falls_back_to_krx_market(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls, reject_un=True))
+    page = c.get("/stocks/000001").get_data(as_text=True)
+    assert "12,345" in page and "(KRX)" in page
+    assert calls == [("000001", "UN"), ("000001", "J")]
+    c.get("/stocks/000002")
+    assert calls[-1] == ("000002", "J")                           # 한 번 바꾸면 계속 KRX로
+
+
+def test_live_price_failure_keeps_page_working(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls, fail=True))
+    home = c.get("/")
+    assert home.status_code == 200
+    text = home.get_data(as_text=True)
+    assert "현재가 조회 오류" in text and "종가" in text and "APPKEY" not in text and "SECRET" not in text
+    assert "현재가를 받지 못해" in c.get("/stocks/000001").get_data(as_text=True)
+
+
+def test_no_kis_key_shows_close_without_calling(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls))
+    cx.settings.values.pop("KIS_APP_KEY")
+    assert "키가 없어 종가로" in c.get("/").get_data(as_text=True)
+    assert calls == []

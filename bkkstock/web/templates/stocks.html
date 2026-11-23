@@ -5,12 +5,12 @@
   <div class="card-head"><h2>보유·관심 종목</h2><span class="muted small">기준일 {{ day or '–' }}</span></div>
   {% if rows %}
   <div class="tbl-wrap"><table class="tbl cards compact-cards">
-    <thead><tr><th>종목</th><th class="r">종가</th><th class="r">어제보다</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험</th><th>최근 공시</th><th></th></tr></thead>
+    <thead><tr><th>종목</th><th class="r">{{ '현재가' if live.live_at else '종가' }}</th><th class="r">어제보다</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험</th><th>최근 공시</th><th></th></tr></thead>
     <tbody>
     {% for w in rows %}
     <tr class="{{ 'row-block' if w.blocked }}">
       <td class="full"><a href="/stocks/{{ w.code }}" class="name">{{ w.name or w.code }}</a> <span class="tag {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span><div class="muted small">{{ w.code }}{% if w.memo %} · {{ w.memo }}{% elif w.kind == '보유' %} · <span class="t-warn">산 이유를 메모해 두세요</span>{% endif %}</div></td>
-      <td class="r num" data-label="종가">{{ w.close | num }}</td>
+      <td class="r num" data-label="{{ '현재가' if w.live_at else '종가' }}">{{ w.close | num }}</td>
       <td class="r num" data-label="어제보다">{{ m.chg(w.change_pct) }}</td>
       <td class="r num" data-label="평가손익">{% if w.pnl is not none %}{{ m.won(w.pnl) }}<br><small>{{ m.chg(w.pnl_pct) }}</small>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="r num" data-label="20일">{{ m.chg((w.ret20 * 100) if w.ret20 is not none else none) }}</td>
@@ -22,6 +22,7 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {{ m.live_note(live) }}
   {% else %}<p class="empty">아래 '종목 추가'에서 보유·관심 종목을 넣으세요.</p>{% endif %}
 </section>
 
