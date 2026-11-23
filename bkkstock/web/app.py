@@ -369,6 +369,10 @@ def register_routes(app: Flask) -> None:
     def apis():
         return page("apis.html", cards=data.api_cards(ctx()), secure=secure_context())
 
+    @app.get("/knowledge")
+    def knowledge():
+        return page("knowledge.html")
+
     @app.get("/ops")
     def ops():
         return page("ops.html", o=data.ops(ctx()))

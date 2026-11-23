@@ -52,13 +52,13 @@ def test_login_redirects_to_next_but_not_offsite(client):
 def test_pages_render_empty_state(client):
     c, _ = client
     login(c)
-    for url in ("/", "/stocks", "/apis", "/ops", "/stocks/005930", "/gibalhae", "/media"):
+    for url in ("/", "/stocks", "/apis", "/ops", "/knowledge", "/stocks/005930", "/gibalhae", "/media"):
         r = c.get(url)
         assert r.status_code == 200, url
     home = c.get("/").get_data(as_text=True)
     assert "아직 일일 수집 기록이 없습니다" in home and 'href="/media"' in home and "📈 주식" in home
     assert "건우<b>주식</b>" in home and "bkk hub" not in home and "bkk<b>hub" not in home
-    for url in ("/", "/stocks", "/apis", "/ops", "/login"):     # 메인 화면들에 콘텐츠 이름이 드러나지 않는다
+    for url in ("/", "/stocks", "/apis", "/ops", "/knowledge", "/login"):     # 메인 화면들에 콘텐츠 이름이 드러나지 않는다
         assert "기발해" not in c.get(url).get_data(as_text=True), url
 
 
@@ -267,3 +267,13 @@ def test_no_kis_key_shows_close_without_calling(client, monkeypatch):
     cx.settings.values.pop("KIS_APP_KEY")
     assert "키가 없어 종가로" in c.get("/").get_data(as_text=True)
     assert calls == []
+
+
+def test_knowledge_page(client):
+    c, _ = client
+    assert c.get("/knowledge").status_code == 302                  # 로그인 필요
+    login(c)
+    page = c.get("/knowledge").get_data(as_text=True)
+    for word in ("IRP", "ISA", "퇴직연금", "노령연금", "증권거래세", "세액공제", "확인 필요", "국민연금공단", "건강보험"):
+        assert word in page, word
+    assert 'href="/knowledge"' in c.get("/").get_data(as_text=True)

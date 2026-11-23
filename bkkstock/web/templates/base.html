@@ -25,6 +25,7 @@
   <nav>
     <a href="/" class="{{ 'on' if nav == 'dashboard' }}">대시보드</a>
     <a href="/stocks" class="{{ 'on' if nav in ('stocks', 'stock') }}">📈 주식</a>
+    <a href="/knowledge" class="{{ 'on' if nav == 'knowledge' }}">📚 지식</a>
     <a href="/apis" class="{{ 'on' if nav == 'apis' }}">API 관리</a>
     <a href="/ops" class="{{ 'on' if nav == 'ops' }}">운영</a>
     {% if has_gibalhae %}<a href="/media" class="{{ 'on' if nav == 'gibalhae' }}" title="콘텐츠" aria-label="콘텐츠">🎬</a>{% endif %}
