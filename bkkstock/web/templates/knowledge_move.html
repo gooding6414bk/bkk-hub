@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}갈아타기 계산{% endblock %}
+{% macro eok(v) -%}{{ '%.2f' % (v / 100000000) }}억{%- endmacro %}
+{% macro man(v) -%}{{ '{:,.0f}'.format(v / 10000) }}만 원{%- endmacro %}
+{% block content %}
+{% include "_knowledge_tabs.html" %}
+<section class="card">
+  <div class="card-head"><h2>🏡 우리 집 갈아타기</h2><a href="/knowledge/realestate" class="pill">← 부동산</a></div>
+  <p class="small">지금 집을 팔고 상급지로 옮길 때 <b>세금 · 중개보수 · 취득세 · 대출 한도 · 모자라는 돈</b>을 어림해 봅니다.
+    숫자는 이 서버에만 저장되고 다른 곳으로 보내지 않습니다.</p>
+  <p class="muted small">2026-11 규칙 기준 어림셈입니다. 실제 양도세는 취득 시점·조정지역 여부·증빙 경비에 따라 달라지니 계약 전에 세무사 상담, 대출은 은행 사전 심사를 받으세요.</p>
+</section>
+
+<form method="post" class="card move-form" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h3 style="margin-top:0">지금 집 (팔 집)</h3>
+  <label>메모 (단지 이름 등, 화면에만) <input name="note" value="{{ p.note }}" maxlength="60"></label>
+  <div class="grid-f">
+    <label>예상 매도가 (억) <input name="sell_price" inputmode="decimal" value="{{ p.sell_price or '' }}" placeholder="예: 20"></label>
+    <label>취득가 (억) <input name="buy_cost" inputmode="decimal" value="{{ p.buy_cost or '' }}" placeholder="분양가·매수가"></label>
+    <label>필요경비 (억) <input name="expenses" inputmode="decimal" value="{{ p.expenses or '' }}" placeholder="취득세·중개·확장 증빙"></label>
+    <label>보유 연수 <input name="hold_years" inputmode="decimal" value="{{ p.hold_years or '' }}"></label>
+    <label>거주 연수 <input name="live_years" inputmode="decimal" value="{{ p.live_years or '' }}"></label>
+  </div>
+  <label class="chk"><input type="checkbox" name="exempt_ok" {{ 'checked' if p.exempt_ok }}> 1세대 1주택 비과세 요건 충족 (2년 보유, 조정대상지역에서 샀으면 2년 거주까지)</label>
+  <h3>갈 집 (살 집)</h3>
+  <div class="grid-f">
+    <label>매수가 (억) <input name="target_price" inputmode="decimal" value="{{ p.target_price or '' }}" placeholder="예: 30"></label>
+    <label>가진 현금·예금 (억) <input name="cash" inputmode="decimal" value="{{ p.cash or '' }}"></label>
+  </div>
+  <label class="chk"><input type="checkbox" name="target_over85" {{ 'checked' if p.target_over85 }}> 전용 85㎡ 초과 (농어촌특별세 0.2%)</label>
+  <label class="chk"><input type="checkbox" name="want_loan" {{ 'checked' if p.want_loan }}> 주택담보대출 쓰기 (수도권·규제지역 기준)</label>
+  <button type="submit">계산하고 저장</button>
+</form>
+
+{% if r.ready %}
+{% set cg = r.cg %}
+<section class="card" id="result">
+  <div class="card-head"><h2>결과{% if p.note %} · {{ p.note }}{% endif %}</h2></div>
+  <div class="tbl-wrap"><table class="tbl compact">
+    <tbody>
+      <tr><td colspan="2"><b>① 팔 때</b></td></tr>
+      <tr><td>양도차익</td><td class="r num">{{ eok(cg.gain) }}</td></tr>
+      <tr><td>과세 대상 차익</td><td class="r num">{{ eok(cg.taxable_gain) }}<div class="muted small">{{ cg.rate_note }}</div></td></tr>
+      {% if cg.taxable_gain %}<tr><td>장기보유특별공제</td><td class="r num">− {{ eok(cg.ltgd) }}<div class="muted small">{{ cg.ltgd_text }}</div></td></tr>{% endif %}
+      <tr><td>양도세 (지방세 포함)</td><td class="r num"><b>{{ man(cg.total) }}</b></td></tr>
+      <tr><td>중개보수</td><td class="r num">{{ man(r.sell_fee) }}<div class="muted small">{{ r.sell_fee_note }}</div></td></tr>
+      <tr><td><b>손에 남는 돈</b></td><td class="r num"><b>{{ eok(r.net_sale) }}</b></td></tr>
+      <tr><td colspan="2"><b>② 살 때</b></td></tr>
+      <tr><td>매수가</td><td class="r num">{{ eok(p.target_price * 100000000) }}</td></tr>
+      <tr><td>취득세 등</td><td class="r num">{{ man(r.acq.total) }}<div class="muted small">취득세 {{ '%.2f' % (r.acq.rate * 100) }}% + 지방교육세{% if r.acq.farm %} + 농특세{% endif %}</div></td></tr>
+      <tr><td>중개보수</td><td class="r num">{{ man(r.buy_fee) }}</td></tr>
+      <tr><td>주담대 최대</td><td class="r num">{{ eok(r.loan) }}<div class="muted small">{{ r.loan_note }}</div></td></tr>
+      <tr><td colspan="2"><b>③ 돈 맞추기</b></td></tr>
+      <tr><td>필요한 돈 (매수가 + 취득세 + 중개)</td><td class="r num">{{ eok(r.need) }}</td></tr>
+      <tr><td>마련 가능 (남는 돈 + 현금 + 대출)</td><td class="r num">{{ eok(r.have) }}</td></tr>
+      <tr><td><b>{{ '남음' if r.gap >= 0 else '모자람' }}</b></td><td class="r num"><b class="{{ 'down' if r.gap < 0 }}">{{ eok(r.gap | abs) }}</b></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted small">이사비·인테리어·등기 법무비·채권 할인·대출 중도상환수수료·보유세 일할(6월 1일 기준)은 빠져 있습니다. 보통 수천만 원 더 듭니다.</p>
+</section>
+{% endif %}
+
+<details class="card fold" open>
+  <summary><b>상급지로 옮길 때 체크리스트 (2026-11)</b></summary>
+  <ol class="small">
+    <li><b>순서 정하기</b>
+      <ul>
+        <li><b>먼저 팔고 사기</b>: 자금이 확정돼 안전. 대신 그 사이 전·월세로 살거나 잔금일을 맞춰야 하고, 파는 동안 갈 집 값이 오를 위험.</li>
+        <li><b>먼저 사고 팔기</b>: 갈 집을 먼저 잡음. 대신 일시적 2주택 관리가 필요 — 대출은 <b>6개월 안에 지금 집을 팔아야</b>(처분조건부, 어기면 대출 회수 + 3년 대출 제한), 양도세 비과세는 새 집 산 날부터 3년 안에 팔기.</li>
+        <li><b>같은 날 잔금</b>: 매도 잔금으로 매수 잔금을 치르는 방식. 두 계약의 잔금일을 맞추고 대출 실행일을 은행과 미리 확정.</li>
+      </ul></li>
+    <li><b>토지거래허가구역</b>(서울 전역): 살 집이 허가구역이면 구청 허가가 필요하고, 1주택자는 지금 집을 처분하겠다는 확약이 있어야 예외적으로 허가. 허가 후 <b>입주해서 2년 실거주</b> 의무 — 전세 끼고 사기 불가. 세입자 있는 집은 유예 조건 확인.</li>
+    <li><b>대출</b>: 상급지일수록 한도가 줄어듭니다 — 25억 원 넘으면 최대 2억. 결국 '지금 집 판 돈 + 현금'이 거의 다. DSR(소득 대비 원리금)로 더 줄 수 있으니 은행 사전 한도 조회부터.</li>
+    <li><b>양도세</b>: 12억 원까지 비과세, 넘는 부분만 과세. 거주 기간이 길수록 장기보유특별공제가 커짐(보유·거주 각 연 4%, 최대 80%).
+      <b>확인 필요</b>: 정부안대로 장특공이 '거주 중심'으로 바뀌면 2028~2029년 이후 팔 때 계산이 달라짐 — 팔 시기를 정할 때 국회 통과 여부를 보세요.</li>
+    <li><b>6월 1일</b>: 그날 주인이 1년치 재산세·종부세를 냄. 지금 집은 6월 1일 전 잔금, 갈 집은 6월 2일 이후 잔금이면 둘 다 안 내거나 덜 냄.</li>
+    <li><b>명의</b>: 지금 집이 배우자 단독 명의라면, 갈 집을 부부 공동명의로 할지 검토 — 종부세(각자 9억 공제 vs 1주택 특례 12억+세액공제), 나중 양도세(차익이 둘로 나뉘어 세율 구간이 낮아짐). 배우자 간 증여는 10년 6억 원까지 증여세 없음, 단 취득세는 따로.</li>
+    <li><b>취득세</b>: 1주택 갈아타기(일시적 2주택)면 1~3%. 9억 원 넘으면 3% + 지방교육세 0.3% (85㎡ 넘으면 농특세 0.2% 더).</li>
+  </ol>
+</details>
+
+<details class="card fold">
+  <summary><b>'상급지' 판단할 때 볼 것</b></summary>
+  <ul class="small">
+    <li><b>가격 차이(갭)의 흐름</b>: 지금 집과 갈 집의 같은 평형 실거래가를 같은 날짜로 놓고, 차이가 최근 1~3년 동안 벌어졌는지 좁혀졌는지. 오를 때 같이 오르고 내릴 때 덜 내린 곳이 상급지 — 2022년 하락기에 두 단지가 각각 얼마나 빠졌는지 비교.</li>
+    <li><b>일자리까지 거리</b>: 강남·여의도·광화문까지 출퇴근 시간. 서울 집값 순위는 대체로 일자리 접근성 순.</li>
+    <li><b>학군</b>: 초·중학교 배정, 학원가 거리. 아이가 있으면 이사 시점(학기)도 같이.</li>
+    <li><b>연식·재건축</b>: 신축은 지금 편하고, 구축은 재건축 기대가 가격에 들어 있음 — 재건축은 분담금·기간 위험을 같이 봄.</li>
+    <li><b>단지 규모·거래량</b>: 대단지·거래가 많은 곳이 팔 때도 쉽고 시세가 덜 흔들림.</li>
+    <li><b>갈아타기 타이밍</b>: 상급지와 하급지는 보통 같은 방향으로 움직이고, 하락기에 갭이 줄었다가 상승기에 벌어지는 경우가 많음 — 갭이 좁을 때가 갈아타기 비용이 가장 작음. 단, 예측이 아니라 경향.</li>
+  </ul>
+  <p class="small">실거래가: <a href="https://rt.molit.go.kr" target="_blank" rel="noopener">국토교통부 실거래가 공개시스템</a> · 공시가격: <a href="https://www.realtyprice.kr" target="_blank" rel="noopener">부동산 공시가격 알리미</a> · 양도세 모의계산: <a href="https://www.hometax.go.kr" target="_blank" rel="noopener">홈택스</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://www.hankyung.com/article/2025062750901" target="_blank" rel="noopener">한경 처분조건부 6개월</a> · <a href="https://www.fsc.go.kr/no010101/84824" target="_blank" rel="noopener">금융위원회</a> · <a href="https://enjoytax.net/blog/tlhz-residence-deferral-expansion-2026-05" target="_blank" rel="noopener">토허구역 실거주 유예</a></p>
+</details>
+{% endblock %}

@@ -372,3 +372,21 @@ def test_indicators_page_and_home_grid(client):
     assert "시장 한눈에" in home and 'href="/knowledge/indicators"' in home
     apis = c.get("/apis").get_data(as_text=True)
     assert "한국은행 ECOS" in apis and "ECOS_API_KEY" in apis
+
+
+def test_move_calculator_saves_only_on_server(client):
+    import json
+    c, appmod = client
+    assert c.get("/knowledge/realestate/move").status_code == 302
+    login(c)
+    page = c.get("/knowledge/realestate/move").get_data(as_text=True)
+    assert "갈아타기" in page and "토지거래허가구역" in page and "결과" not in page.split("체크리스트")[0].split("</form>")[1]
+    r = c.post("/knowledge/realestate/move", data={"csrf": c.environ_base["HTTP_X_CSRF"], "note": "우리 집",
+               "sell_price": "20", "buy_cost": "9", "hold_years": "7", "live_years": "7", "exempt_ok": "on",
+               "target_price": "30", "cash": "2", "want_loan": "on"})
+    assert r.status_code == 302
+    page = c.get("/knowledge/realestate/move").get_data(as_text=True)
+    assert "모자람" in page and "우리 집" in page and "양도세" in page
+    saved = json.loads(appmod.ctx().store.meta_get("move_plan"))
+    assert saved["sell_price"] == 20 and saved["note"] == "우리 집"
+    assert c.post("/knowledge/realestate/move", data={"sell_price": "1"}, headers={"X-CSRF": ""}).status_code == 403

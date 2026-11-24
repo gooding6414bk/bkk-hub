@@ -377,6 +377,21 @@ def register_routes(app: Flask) -> None:
     def knowledge_indicators():
         return render_template("knowledge_indicators.html", nav="knowledge", ktab="indicators", v=data.indicators(ctx()))
 
+    @app.route("/knowledge/realestate/move", methods=["GET", "POST"])
+    def knowledge_move():
+        import json as _json
+        from ..analysis import move as movemod
+        st = ctx().store
+        if request.method == "POST":
+            plan = movemod.Plan.from_form(request.form)
+            st.meta_set("move_plan", _json.dumps(plan.to_dict(), ensure_ascii=False))
+            return redirect(url_for("knowledge_move") + "#result")
+        try:
+            plan = movemod.Plan.from_dict(_json.loads(st.meta_get("move_plan") or "{}"))
+        except ValueError:
+            plan = movemod.Plan()
+        return render_template("knowledge_move.html", nav="knowledge", ktab="realestate", p=plan, r=movemod.calc(plan))
+
     @app.get("/knowledge/realestate")
     def knowledge_realestate():
         return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate")

@@ -395,3 +395,10 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 .mk-grid .cell small { display: block; font-size: .72rem; color: var(--muted); }
 .mk-grid .cell.stale b { color: var(--muted); }
 @media (min-width: 900px) { .mk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* 🏡 갈아타기 계산 */
+.move-form label { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; }
+.move-form input:not([type=checkbox]) { width: 100%; }
+.move-form .grid-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 8px 0; }
+.move-form label.chk { flex-direction: row; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.move-form button { margin-top: 12px; width: 100%; }
+@media (min-width: 900px) { .move-form .grid-f { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
