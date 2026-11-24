@@ -81,3 +81,10 @@ def test_fetch_falls_back_a_year_when_annual_not_filed(settings):
 def test_no_dart_key(settings):
     ctx = make_ctx(settings)
     assert "OpenDART" in fm.get(ctx, "000001", dt.date(2026, 11, 24))["error"]
+
+
+def test_financial_company_gets_no_debt_warning():
+    rows = [r for r in ACC if r["account_nm"] != "매출액"]
+    rows = [dict(r, thstrm_amount="3,900,000,000,000") if r["account_nm"] == "부채총계" else r for r in rows]
+    out = fm.build(fm.parse_accounts(rows), 2025, None, {})
+    assert out["financial"] and not any("200%" in w for w in out["warns"])

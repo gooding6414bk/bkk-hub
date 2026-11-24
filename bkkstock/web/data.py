@@ -406,8 +406,11 @@ def dashboard(ctx: Ctx) -> dict:
         totals = {"value": sum(w["value_now"] for w in own),
                   "pnl": sum(w["pnl"] for w in own if w.get("pnl") is not None),
                   "pnl_today": sum(w["pnl_today"] for w in own if w.get("pnl_today") is not None)}
-        cost = totals["value"] - totals["pnl"]
-        totals["pnl_pct"] = totals["pnl"] / cost * 100 if cost else None
+        # 수익률은 평균 단가를 넣은 종목만으로 (단가 없는 종목을 넣으면 손익 0·원가만 커져 수익률이 낮게 나옴)
+        priced = [w for w in own if w.get("pnl") is not None]
+        cost = sum(w["value_now"] - w["pnl"] for w in priced)
+        totals["pnl_pct"] = sum(w["pnl"] for w in priced) / cost * 100 if cost else None
+        totals["no_cost"] = len(own) - len(priced)
     unsent = ctx.store.query("SELECT COUNT(*) AS n FROM alerts WHERE sent=0")[0]["n"]
     issues = [it for it in items if it["status"] in ("fail", "warn")]
     return {
