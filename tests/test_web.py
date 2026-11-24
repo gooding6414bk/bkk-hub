@@ -392,6 +392,35 @@ def test_move_calculator_saves_only_on_server(client):
     assert c.post("/knowledge/realestate/move", data={"sell_price": "1"}, headers={"X-CSRF": ""}).status_code == 403
 
 
+def test_spend_dashboard_saves_only_on_server(client):
+    import json
+    c, appmod = client
+    assert c.get("/spend").status_code == 302
+    login(c)
+    home = c.get("/spend").get_data(as_text=True)
+    assert "💳 소비" in home and "지금 뭘로 낼까" in home and "먼저" in home
+    tok = c.environ_base["HTTP_X_CSRF"]
+    r = c.post("/spend/wallet", data={"csrf": tok, "salary": "5000", "children": "0", "base_credit": "1500",
+               "c0_id": "", "c0_name": "생활카드", "c0_kind": "신용", "c0_base": "1", "c0_tier": "30", "c0_prev": "on",
+               "v0_id": "", "v0_name": "디지털 온누리", "v0_kind": "온누리", "v0_balance": "200000"})
+    assert r.status_code == 302
+    page = c.get("/spend?place=시장&amount=100000").get_data(as_text=True)
+    assert page.index("1. 온누리상품권") < page.index("생활카드") and "연말정산 진행" in page and "체크카드 구간" in page
+    saved = json.loads(appmod.ctx().store.meta_get("spend_state"))
+    vid = saved["vouchers"][0]["id"]
+    assert c.post("/spend/records", data={"csrf": tok, "amount": "30000", "place": "시장", "method": f"v:{vid}",
+                                          "date": "2026-11-20"}).status_code == 302
+    rec = c.get("/spend/records").get_data(as_text=True)
+    assert "30,000원" in rec and "기록 1건" in rec
+    saved = json.loads(appmod.ctx().store.meta_get("spend_state"))
+    assert saved["vouchers"][0]["balance"] == 170_000
+    assert c.post("/spend/records", data={"csrf": tok, "amount": "", "place": "시장"}).status_code == 400
+    assert c.post(f"/spend/records/{saved['records'][0]['id']}/delete", data={"csrf": tok}).status_code == 302
+    assert json.loads(appmod.ctx().store.meta_get("spend_state"))["vouchers"][0]["balance"] == 200_000
+    assert "생활카드" in c.get("/spend/wallet").get_data(as_text=True)
+    assert c.post("/spend/wallet", data={"salary": "1"}, headers={"X-CSRF": ""}).status_code == 403
+
+
 def test_stock_page_has_chips_fin_and_calendar(client, monkeypatch):
     import datetime as dt
     from tests.conftest import make_prices

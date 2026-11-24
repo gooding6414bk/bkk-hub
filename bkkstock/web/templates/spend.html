@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "_spend_macros.html" import won, man, meter, record_form with context %}
+{% block title %}소비{% endblock %}
+{% block content %}
+{% include "_spend_tabs.html" %}
+{% if not d.ready %}
+<section class="card warnbox">먼저 <a href="/spend/wallet"><b>👛 지갑</b></a>에서 총급여와 가진 카드·상품권을 넣어 주세요.
+  그래야 카드 할인, 상품권 할인, 연말정산 공제를 합쳐서 추천합니다. 숫자는 이 서버에만 저장됩니다.</section>
+{% endif %}
+
+<form method="get" action="/spend#pick" class="card spend-form" id="pick">
+  <div class="card-head"><h2>지금 뭘로 낼까</h2><span class="muted small">결제 직전에 장소와 금액만</span></div>
+  <div class="grid-f">
+    <label>어디서 <select name="place">{% for k, name, g, vs in places %}<option value="{{ k }}" {{ 'selected' if q.place == k }}>{{ name }}</option>{% endfor %}</select></label>
+    <label>얼마 (원) <input name="amount" inputmode="numeric" value="{{ q.amount }}" placeholder="예: 32000" required></label>
+  </div>
+  <button type="submit">추천 보기</button>
+</form>
+
+{% if rec %}
+<section class="card" id="result">
+  <div class="card-head"><h2>{{ rec.place_name }}에서 {{ won(rec.amount) }}</h2><span class="st">{{ rec.advice[0] }}</span></div>
+  <ol class="opts">
+  {% for o in rec.options %}
+    <li class="{{ 'best' if loop.first }}{{ ' rest' if loop.index > 3 }}">
+      <div class="opt-head"><b>{{ loop.index }}. {{ o.label }}</b><span class="num">{% if o.value >= 0.5 %}약 {{ won(o.value) }} ({{ '%.1f' % o.pct }}%){% else %}돌아오는 돈 없음{% endif %}</span></div>
+      {% if o.parts %}<div class="small muted">{% for name, v, why in o.parts %}{{ name }} {{ won(v) }}{% if why %} · {{ why }}{% endif %}{% if not loop.last %} + {% endif %}{% endfor %}</div>{% endif %}
+      {% if o.note %}<div class="small t-warn">{{ o.note }}</div>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+  <form method="post" action="/spend/records" class="toolbar">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="home">
+    <input type="hidden" name="place" value="{{ rec.place }}"><input type="hidden" name="amount" value="{{ '%.0f' % rec.amount }}">
+    <input type="hidden" name="method" value="{{ rec.options[0].method }}"><input type="hidden" name="date" value="{{ today }}">
+    <button type="submit">1순위로 냈어요 — 기록</button><a class="pill" href="/spend/records?place={{ rec.place }}&amount={{ '%.0f' % rec.amount }}">다른 수단으로 기록</a>
+  </form>
+  <p class="muted small">공제로 돌아오는 세금은 올해 예상 사용액과 한계세율 {{ '%.1f' % (rec.rate * 100) }}%로 어림한 값입니다. 카드 월 할인 한도는 빠져 있습니다.</p>
+</section>
+{% endif %}
+
+<div class="grid2">
+<section class="card">
+  <div class="card-head"><h2>연말정산 진행</h2><span class="st {{ 'ok' if d.zone in ('체크카드 구간', '신용카드 구간') else 'warn' if d.zone == '한도 채움' else '' }}">{{ d.zone }}</span></div>
+  {% if d.now %}
+  {% set th = d.now.threshold %}
+  <div class="small">문턱(총급여 25%) {{ man(th) }} 중 <b>{{ man(d.now.spent) }}</b> 사용{% if d.now.spent >= th %} — 넘음{% else %} — {{ man(th - d.now.spent) }} 남음{% endif %}</div>
+  {{ meter(d.now.spent / th * 100 if th else 0, 'ok' if d.now.spent >= th else '') }}
+  <div class="small">기본 공제 한도 {{ man(d.now.limit) }} 중 지금 {{ man(d.now.general) }} · 연말 예상 {{ man(d.fut.general) }}</div>
+  {{ meter(d.fut.general / d.now.limit * 100, 'warn' if d.fut.raw >= d.now.limit else '') }}
+  <dl class="kv">
+    <dt>지금까지 공제</dt><dd class="num">{{ man(d.now.total) }} → 세금 약 {{ man(d.refund_now) }}</dd>
+    <dt>이 속도면 연말</dt><dd class="num">사용 {{ man(d.fut.spent) }} · 공제 {{ man(d.fut.total) }} → 세금 약 <b>{{ man(d.refund_fut) }}</b></dd>
+    <dt>한계세율(어림)</dt><dd class="num">{{ '%.1f' % (d.rate * 100) }}%</dd>
+  </dl>
+  {% endif %}
+  <p class="small">{{ d.advice }}</p>
+  {% if d.now %}
+  <details class="fold"><summary>묶음별 올해 사용액</summary>
+    <table class="tbl compact"><thead><tr><th>묶음</th><th class="r">공제율</th><th class="r">지금까지</th><th class="r">연말 예상</th></tr></thead><tbody>
+    {% for k, name in d.groups.items() %}<tr><td>{{ name }}</td><td class="r num">{{ {'credit': 15, 'debit': 30, 'culture': 30, 'market': 40, 'transit': 40}[k] }}%</td><td class="r num">{{ man(d.ytd[k]) }}</td><td class="r num">{{ man(d.proj[k]) }}</td></tr>{% endfor %}
+    </tbody></table>
+    <p class="muted small">연말 예상 = 지금까지 × (365 ÷ 지난 날수). 앱 쓰기 전 사용액은 👛 지갑에 홈택스 '연말정산 미리보기' 숫자로 넣으세요.</p>
+  </details>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>카드 실적 · 이번 달</h2>{% if d.cards %}<span class="muted small">말일까지 {{ d.cards[0].days_left }}일</span>{% endif %}</div>
+  {% if d.cards %}<ul class="list">
+  {% for c in d.cards %}
+    <li><div class="opt-head"><span><span class="name">{{ c.name }}</span><span class="tag">{{ c.kind }}</span>{% if not c.prev_ok %} <span class="chip warn">지난달 미달</span>{% endif %}</span>
+      <span class="num small">{% if c.tier %}{{ man(c.used) }} / {{ man(c.tier) }}{% else %}{{ man(c.used) }} · 실적 조건 없음{% endif %}</span></div>
+      {% if c.tier %}{{ meter(c.pct, 'ok' if c.left == 0 else '') }}
+      <div class="small muted">{% if c.left %}다음 달 혜택까지 <b>{{ won(c.left) }}</b> 남음{% if c.benefit %} · 채우면 약 {{ won(c.benefit) }}{% endif %}{% else %}실적 채움 ✓{% endif %}</div>{% endif %}
+    </li>
+  {% endfor %}</ul>
+  <p class="muted small">앱에 기록한 결제만 셉니다. 모자란 금액이 채웠을 때 혜택보다 크면 억지로 채우지 마세요.</p>
+  {% else %}<p class="empty">등록한 카드가 없습니다. <a href="/spend/wallet">👛 지갑</a>에서 넣어 주세요.</p>{% endif %}
+</section>
+</div>
+
+<div class="grid2">
+<section class="card">
+  <div class="card-head"><h2>상품권 지갑</h2><a class="pill" href="/spend/wallet#vouchers">고치기</a></div>
+  {% if d.vouchers %}<ul class="list">
+  {% for v in d.vouchers %}
+    <li><div class="opt-head"><span><span class="name">{{ v.name }}</span><span class="tag">{{ v.kind }}</span></span><b class="num">{{ won(v.balance) }}</b></div>
+      <div class="small muted">{% if v.exp %}유효기간 {{ v.exp }}{% else %}유효기간 안 넣음{% endif %}{% for w in v.warn %} · <span class="t-warn">{{ w }}</span>{% endfor %}</div></li>
+  {% endfor %}</ul>
+  <p class="muted small">디지털 온누리는 60% 이상 쓰면 남은 돈을 돌려받을 수 있습니다(할인받은 몫은 빼고).</p>
+  {% else %}<p class="empty">등록한 상품권이 없습니다.</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>이번 달</h2><a class="pill" href="/spend/records">전체 기록</a></div>
+  <dl class="kv"><dt>쓴 돈</dt><dd class="num"><b>{{ won(d.month_spent) }}</b></dd><dt>받은 할인·적립(어림)</dt><dd class="num">{{ won(d.month_benefit) }}</dd></dl>
+  {% if d.recent %}<ul class="list compact small">{% for r in d.recent %}<li>{{ r.date[5:] }} · {{ r.place_name }} · {{ won(r.amount) }} <span class="muted">{{ r.method_name }}</span></li>{% endfor %}</ul>{% endif %}
+  <details class="fold"><summary>바로 기록하기</summary>{{ record_form(places, methods, today, back='home') }}</details>
+</section>
+</div>
+
+<details class="card fold">
+  <summary><b>상황별 결제 규칙 (2026년 사용분)</b></summary>
+  <div class="tbl-wrap"><table class="tbl compact small"><thead><tr><th>어디서</th><th>1순위</th><th>이유</th></tr></thead><tbody>
+    <tr><td>전통시장</td><td>디지털 온누리</td><td>구매 때 7% 할인. 공제는 결제수단과 상관없이 40%</td></tr>
+    <tr><td>동네 가게·식당·학원</td><td>지역사랑상품권</td><td>평시 8~12% 할인 + 공제 30%. 연매출 30억 원 넘는 가게는 안 됨</td></tr>
+    <tr><td>대형마트·온라인</td><td>신용 또는 체크</td><td>위 '연말정산 진행'의 구간대로</td></tr>
+    <tr><td>버스·지하철</td><td>K-패스·모두의 카드</td><td>환급 + 공제 40%</td></tr>
+    <tr><td>책·공연·헬스·수영</td><td>혜택 큰 카드</td><td>결제수단과 상관없이 30%(총급여 7천만 원 이하). 강습비 제외</td></tr>
+    <tr><td>공과금·통신·보험</td><td>혜택 큰 신용카드</td><td>공제가 안 되므로 카드 혜택만</td></tr>
+    <tr><td>민간상품권</td><td>쓸 만큼만 사기</td><td>살 때는 공제 0. 쓸 때 현금영수증을 받아야 30%</td></tr>
+  </tbody></table></div>
+  <p class="small">문턱(총급여 25%)은 신용카드 사용분부터 채워집니다. 그래서 문턱까지는 혜택 큰 신용카드, 넘은 뒤엔 체크카드, 기본 한도를 채우면 다시 신용카드가 유리합니다.</p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://www.law.go.kr/LSW/lsLawLinkInfo.do?lsJoLnkSeq=1000669411&chrClsCd=010202" target="_blank" rel="noopener">조세특례제한법 제126조의2</a> · <a href="https://www.korea.kr/news/policyNewsView.do?newsId=148971060" target="_blank" rel="noopener">디지털 온누리 할인율</a> · 2027년엔 온누리 구매 할인 5% + 전통시장 사용 5% 환급으로 바뀔 예정</p>
+</details>
+{% endblock %}

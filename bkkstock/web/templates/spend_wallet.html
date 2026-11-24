@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}지갑{% endblock %}
+{% block content %}
+{% include "_spend_tabs.html" %}
+{% set p = s.profile %}
+<form method="post" class="spend-form" autocomplete="off">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<section class="card">
+  <div class="card-head"><h2>나</h2></div>
+  <p class="small">숫자는 이 서버에만 저장되고 다른 곳으로 보내지 않습니다. 카드번호는 넣지 않습니다.</p>
+  <div class="grid-f">
+    <label>총급여 (만 원, 1년 세전) <input name="salary" inputmode="numeric" value="{{ '%.0f' % (p.salary / 10000) if p.salary else '' }}" placeholder="예: 5000"></label>
+    <label>자녀 수 (기본공제 대상) <select name="children">{% for n in (0, 1, 2) %}<option value="{{ n }}" {{ 'selected' if p.children == n }}>{{ n }}{{ '명 이상' if n == 2 else '명' }}</option>{% endfor %}</select></label>
+    <label>한계세율 (%, 모르면 비우기) <input name="rate" inputmode="decimal" value="{{ p.rate or '' }}" placeholder="비우면 어림"></label>
+    <label>디지털 온누리 할인율 (%) <input name="onnuri" inputmode="decimal" value="{{ p.onnuri }}"></label>
+    <label>지역사랑상품권 할인율 (%) <input name="local" inputmode="decimal" value="{{ p.local }}"></label>
+  </div>
+  <h3>앱 쓰기 전 올해 사용액 (만 원)</h3>
+  <p class="muted small">홈택스 '연말정산 미리보기'의 1~9월 숫자 + 그 뒤 쓴 돈. 앱에 기록한 결제는 빼고 넣으세요.</p>
+  <div class="grid-f">
+    {% for k, name in (('credit', '신용카드'), ('debit', '체크·현금영수증'), ('market', '전통시장'), ('transit', '대중교통'), ('culture', '도서·공연·체육')) %}
+    <label>{{ name }} <input name="base_{{ k }}" inputmode="numeric" value="{{ '%.0f' % (p.base[k] / 10000) if p.base_year == year and p.base[k] else '' }}"></label>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card" id="cards">
+  <div class="card-head"><h2>카드</h2></div>
+  <p class="muted small">장소별 할인은 '마트 5, 온라인 3, 교통 10'처럼 씁니다. 장소 이름: {% for k, name, g, vs in places %}{{ k }}{{ ', ' if not loop.last }}{% endfor %}.
+    '지난달 실적 채움'은 지난달 기록이 없을 때만 씁니다.</p>
+  {% for c in s.cards + [{}, {}] %}{% set i = loop.index0 %}
+  <fieldset class="box">
+    <input type="hidden" name="c{{ i }}_id" value="{{ c.id or '' }}">
+    <div class="grid-f">
+      <label>카드 이름 <input name="c{{ i }}_name" value="{{ c.name or '' }}" maxlength="30" placeholder="{{ '새 카드' if not c }}"></label>
+      <label>종류 <select name="c{{ i }}_kind"><option {{ 'selected' if c.kind != '체크' }}>신용</option><option {{ 'selected' if c.kind == '체크' }}>체크</option></select></label>
+      <label>기본 적립·할인 (%) <input name="c{{ i }}_base" inputmode="decimal" value="{{ c.base or '' }}" placeholder="예: 0.5"></label>
+      <label>전월 실적 조건 (만 원) <input name="c{{ i }}_tier" inputmode="numeric" value="{{ '%.0f' % (c.tier / 10000) if c.tier else '' }}" placeholder="없으면 비우기"></label>
+      <label>실적 채우면 한 달 혜택 (원, 어림) <input name="c{{ i }}_benefit" inputmode="numeric" value="{{ '%.0f' % c.benefit if c.benefit else '' }}"></label>
+      <label>장소별 추가 할인 (%) <input name="c{{ i }}_bonus" value="{{ bonus_text(c.bonus) if c.bonus else '' }}" placeholder="예: 마트 5, 교통 10"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="c{{ i }}_prev" {{ 'checked' if c.prev_ok or not c }}> 지난달 실적 채움</label>
+    {% if c %}<label class="chk"><input type="checkbox" name="c{{ i }}_del"> 이 카드 지우기</label>{% endif %}
+  </fieldset>
+  {% endfor %}
+</section>
+
+<section class="card" id="vouchers">
+  <div class="card-head"><h2>상품권</h2></div>
+  <p class="muted small">온누리·지역사랑은 결제 추천에 들어갑니다. 민간상품권(백화점·문화상품권 등)은 잔액과 유효기간만 챙깁니다.</p>
+  {% for v in s.vouchers + [{}, {}] %}{% set i = loop.index0 %}
+  <fieldset class="box">
+    <input type="hidden" name="v{{ i }}_id" value="{{ v.id or '' }}">
+    <div class="grid-f">
+      <label>이름 <input name="v{{ i }}_name" value="{{ v.name or '' }}" maxlength="30" placeholder="{{ '예: 디지털 온누리' if not v }}"></label>
+      <label>종류 <select name="v{{ i }}_kind">{% for k in kinds %}<option {{ 'selected' if v.kind == k }}>{{ k }}</option>{% endfor %}</select></label>
+      <label>잔액 (원) <input name="v{{ i }}_balance" inputmode="numeric" value="{{ '%.0f' % v.balance if v.balance else '' }}"></label>
+      <label>유효기간 <input type="date" name="v{{ i }}_exp" value="{{ v.exp or '' }}"></label>
+    </div>
+    {% if v %}<label class="chk"><input type="checkbox" name="v{{ i }}_del"> 이 상품권 지우기</label>{% endif %}
+  </fieldset>
+  {% endfor %}
+  <button type="submit">저장</button>
+</section>
+</form>
+{% endblock %}

@@ -32,7 +32,7 @@ from ..config import KNOWN_KEYS, get_settings, write_env_values
 from ..jobs.common import Ctx, make_ctx
 from ..jobs.watchdog import health
 from ..store import normalize_code
-from ..timeutil import iso_kst
+from ..timeutil import iso_kst, now_kst
 from . import data
 from .apis import BY_ID, run_test
 
@@ -399,6 +399,54 @@ def register_routes(app: Flask) -> None:
     @app.get("/knowledge/realestate")
     def knowledge_realestate():
         return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate")
+
+    # ---------- 💳 소비: 입력은 서버 DB(meta 'spend_state')에만 ----------
+    def spend_state():
+        from ..analysis import spend as sp
+        return sp, sp.load(ctx().store.meta_get("spend_state"))
+
+    def spend_page(name, stab, sp, state, **kw):
+        today = now_kst().date()
+        return render_template(name, nav="spend", stab=stab, s=state, places=sp.PLACES, methods=sp.methods(state),
+                               today=today.isoformat(), year=today.year, **kw)
+
+    @app.get("/spend")
+    def spend_home():
+        sp, state = spend_state()
+        today = now_kst().date()
+        place, amount = request.args.get("place", ""), sp.num(request.args.get("amount"))
+        rec = sp.recommend(state, place, amount, today) if place in sp.PLACE and amount > 0 else None
+        return spend_page("spend.html", "home", sp, state, d=sp.dashboard(state, today), rec=rec,
+                          q={"place": place or "동네", "amount": request.args.get("amount", "")})
+
+    @app.route("/spend/wallet", methods=["GET", "POST"])
+    def spend_wallet():
+        sp, state = spend_state()
+        if request.method == "POST":
+            ctx().store.meta_set("spend_state", sp.dump(sp.wallet_from_form(state, request.form, now_kst().date())))
+            return redirect(url_for("spend_home"))
+        return spend_page("spend_wallet.html", "wallet", sp, state, kinds=sp.VOUCHER_KINDS, bonus_text=sp.bonus_text)
+
+    @app.route("/spend/records", methods=["GET", "POST"])
+    def spend_records():
+        sp, state = spend_state()
+        err = None
+        if request.method == "POST":
+            err = sp.add_record(state, request.form, now_kst().date())
+            if not err:
+                ctx().store.meta_set("spend_state", sp.dump(state))
+                return redirect(url_for("spend_home") if request.form.get("back") == "home" else url_for("spend_records"))
+        q = {"place": request.args.get("place") or request.form.get("place") or "동네",
+             "amount": request.args.get("amount") or request.form.get("amount") or ""}
+        return spend_page("spend_records.html", "records", sp, state, rows=sp.record_rows(state, now_kst().date()),
+                          err=err, q=q), (400 if err else 200)
+
+    @app.post("/spend/records/<int:rid>/delete")
+    def spend_record_delete(rid: int):
+        sp, state = spend_state()
+        if sp.delete_record(state, rid):
+            ctx().store.meta_set("spend_state", sp.dump(state))
+        return redirect(url_for("spend_records"))
 
     @app.get("/ops")
     def ops():

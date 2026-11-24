@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_spend_macros.html" import won, record_form with context %}
+{% block title %}소비 기록{% endblock %}
+{% block content %}
+{% include "_spend_tabs.html" %}
+<section class="card">
+  <div class="card-head"><h2>결제 기록하기</h2></div>
+  {% if err %}<p class="err">{{ err }}</p>{% endif %}
+  {{ record_form(places, methods, today, place=q.place, amount=q.amount) }}
+  <p class="muted small">상품권으로 낸 기록은 그 상품권 잔액에서 빠지고, 기록을 지우면 돌아옵니다.</p>
+</section>
+<section class="card">
+  <div class="card-head"><h2>기록 {{ rows|length }}건</h2></div>
+  {% if rows %}<div class="tbl-wrap"><table class="tbl compact">
+    <thead><tr><th>날짜</th><th>어디서</th><th class="r">금액</th><th>무엇으로</th><th class="r">할인·적립</th><th></th></tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td class="num">{{ r.date }}</td><td>{{ r.place_name }}{% if r.memo %}<div class="muted small">{{ r.memo }}</div>{% endif %}</td>
+      <td class="r num">{{ won(r.amount) }}</td><td class="small">{{ r.method_name }}</td><td class="r num">{{ won(r.benefit) }}</td>
+      <td class="r"><form method="post" action="/spend/records/{{ r.id }}/delete" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost danger" title="지우기">지우기</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">아직 기록이 없습니다.</p>{% endif %}
+</section>
+{% endblock %}
