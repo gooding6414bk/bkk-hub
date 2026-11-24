@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}금융 지식{% endblock %}
+{% block title %}지식{% endblock %}
 {% block content %}
 {% include "_knowledge_tabs.html" %}
 <section class="card">
@@ -23,29 +23,88 @@
 </details>
 
 <details class="card fold" id="irp">
-  <summary><b>IRP · 연금저축</b> <span class="muted small">세액공제 최대 900만 원</span></summary>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th></th><th>연금저축(펀드)</th><th>IRP (개인형 퇴직연금)</th></tr></thead>
+  <summary><b>IRP · 연금저축</b> <span class="chip good">세액공제 최대 900만</span></summary>
+  <ol class="small summary3">
+    <li>연금저축 600만 + IRP 300만 = <b>900만 원</b>을 넣으면 연말정산 때 <b>118.8만~148.5만 원</b>을 돌려받습니다.</li>
+    <li>55세 전에 빼면 공제받은 돈과 수익에 16.5% 세금. <b>55세까지 안 쓸 돈만</b> 넣으세요.</li>
+    <li>12월 31일 입금분까지 그해 공제. ISA 만기 이전분은 공제 대상이 최대 300만 원 더 늘어납니다.</li>
+  </ol>
+  <div class="tbl-wrap"><table class="tbl compact">
+    <thead><tr><th></th><th>연금저축(펀드)</th><th>IRP</th></tr></thead>
     <tbody>
-      <tr><td>가입</td><td>누구나</td><td>소득이 있는 사람 (근로자·자영업자 등)</td></tr>
+      <tr><td>가입</td><td>누구나</td><td>소득이 있는 사람</td></tr>
       <tr><td>납입 한도</td><td colspan="2">둘 합쳐 연 1,800만 원 (ISA 만기 이전액은 별도)</td></tr>
-      <tr><td>세액공제 한도</td><td>연 600만 원까지</td><td>연금저축과 합쳐 900만 원 (IRP만으로 900만도 가능)</td></tr>
-      <tr><td>투자</td><td>주식형 ETF·펀드 제한 없음 (레버리지·인버스 ETF, 개별 주식은 안 됨)</td><td>위험자산 70%까지, 30% 이상은 예금·채권형 등 안전자산. 개별 주식 안 됨</td></tr>
-      <tr><td>중간에 빼기</td><td>일부 인출 자유 (공제받은 돈·수익은 16.5% 세금)</td><td>법에 정한 사유만 (무주택자 주택 구입, 6개월 이상 요양, 파산·회생, 재난 등). 아니면 통째로 해지</td></tr>
+      <tr><td>공제 한도</td><td>600만</td><td>합쳐 900만 (IRP만으로 900만도 가능)</td></tr>
+      <tr><td>투자</td><td>ETF·펀드 (레버리지·인버스·개별 주식 제외)</td><td>위험자산 70%까지. 나머지 30%도 TDF·채권혼합 ETF로 채울 수 있음</td></tr>
+      <tr><td>중간에 빼기</td><td>일부 인출 가능 (공제분·수익 16.5%)</td><td>무주택 주택구입·6개월 요양·파산 등 법정 사유만, 아니면 전부 해지</td></tr>
     </tbody>
   </table></div>
+  <div class="tbl-wrap"><table class="tbl compact">
+    <thead><tr><th>넣은 돈</th><th class="r">총급여 5,500만 이하 (16.5%)</th><th class="r">초과 (13.2%)</th></tr></thead>
+    <tbody>
+      <tr><td>연금저축 600만</td><td class="r num">99만</td><td class="r num">79.2만</td></tr>
+      <tr><td>+ IRP 300만 = 900만</td><td class="r num">148.5만</td><td class="r num">118.8만</td></tr>
+      <tr><td>+ ISA 이전 300만 = 1,200만</td><td class="r num">198만</td><td class="r num">158.4만</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small">종합소득 기준은 4,500만 원. <a href="#calc-pension">내 환급액 계산 →</a></p>
+  <details class="sub-fold"><summary>예시 계산 (총급여 7,000만 원)</summary>
+    <ul class="small">
+      <li>900만 원 납입 → <b>118.8만 원</b> 환급.</li>
+      <li>ISA 만기금 3,000만 원을 연금계좌로 이전 → 10%인 300만 원이 공제 대상에 추가 → 39.6만 원 더.</li>
+      <li>60세에 계좌 1억 원이면 첫해 연금 수령한도 = 1억 ÷ (11 − 1) × 120% = <b>1,200만 원</b>.</li>
+      <li>연 1,000만 원씩 연금으로 받으면 연금소득세 5.5% = 55만 원. 한꺼번에 빼면 16.5% = 165만 원.</li>
+    </ul>
+  </details>
+  <details class="sub-fold"><summary>흔한 실수</summary>
+    <ul class="small">
+      <li>낸 세금(결정세액)이 공제액보다 적으면 남는 공제는 사라집니다. 배우자 계좌에 대신 넣어도 내 공제가 안 됩니다.</li>
+      <li>연금저축에만 900만 원을 넣으면 공제는 600만 원까지만.</li>
+      <li>IRP를 예금에 방치. 30% 안전자산 칸도 TDF·채권혼합으로 굴릴 수 있습니다.</li>
+      <li>13.2%로 공제받고 중도 해지하면 16.5%를 내서 오히려 손해.</li>
+      <li>공제받지 않은 납입분은 금융사에 '연금보험료 등 소득·세액공제확인서'를 내야 나중에 세금 없이 뺄 수 있습니다.</li>
+    </ul>
+  </details>
+  <h3>받을 때 (55세 이후, 가입 5년 이상)</h3>
   <ul class="small">
-    <li><b>세액공제율</b>: 총급여 5,500만 원 이하(종합소득 4,500만 원 이하) <b>16.5%</b>, 넘으면 <b>13.2%</b> (지방소득세 포함). 900만 원 넣으면 148.5만 원 / 118.8만 원 돌려받음.</li>
-    <li><b>과세이연</b>: 계좌 안에서 생긴 매매차익·분배금은 뺄 때까지 세금을 안 뗍니다. 그래서 해외주식형 ETF(미국 지수 등)를 넣기 좋은 곳입니다.</li>
-    <li><b>받을 때 (55세 이후, 가입 5년 이상)</b>: 연금소득세 55~69세 <b>5.5%</b>, 70~79세 <b>4.4%</b>, 80세 이상 <b>3.3%</b>.
-      공제받은 돈·수익에서 꺼내는 연금이 한 해 <b>1,500만 원</b>을 넘으면 전액 종합과세와 16.5% 분리과세 중 고릅니다.
-      퇴직금에서 나온 연금과 국민연금 같은 공적연금은 이 1,500만 원에 안 셉니다.</li>
-    <li><b>연금수령한도</b>: 한 해에 '계좌 평가액 ÷ (11 − 연금수령연차) × 120%'까지가 연금으로 인정 (첫해 = 1년차, 11년차부터는 한도 없음.
-      2013년 3월 전에 가입한 계좌는 6년차부터 셈). 넘게 빼면 연금 외 인출(16.5%).</li>
-    <li>연말정산 때 공제받으려면 <b>12월 31일까지 입금</b>해야 합니다. 공제받지 않은 원금은 언제 빼도 세금이 없습니다.</li>
+    <li>연금소득세 55~69세 <b>5.5%</b>, 70~79세 <b>4.4%</b>, 80세 이상 <b>3.3%</b>.</li>
+    <li>공제받은 돈·수익에서 받는 연금이 한 해 <b>1,500만 원</b>을 넘으면 종합과세와 16.5% 분리과세 중 선택 (퇴직금에서 나온 연금·국민연금은 이 1,500만 원에 안 셈).</li>
+    <li>연금수령한도 = 계좌 평가액 ÷ (11 − 연금수령연차) × 120% (첫해 = 1년차, 11년차부터 한도 없음, 2013년 3월 전 가입 계좌는 6년차부터 셈). 넘게 빼면 연금 외 인출(16.5%).</li>
+    <li>계좌 안의 매매차익·분배금은 뺄 때까지 세금이 없습니다(과세이연) — 해외주식형 ETF를 넣기 좋은 이유.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://www.tossbank.com/articles/year-end-pension-savings" target="_blank" rel="noopener">토스뱅크 연금저축·IRP 정리</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://www.law.go.kr/법령/소득세법" target="_blank" rel="noopener">소득세법(국가법령정보센터)</a> · <a href="https://100lifeplan.fss.or.kr" target="_blank" rel="noopener">통합연금포털(금감원)</a> · <a href="https://www.tossbank.com/articles/year-end-pension-savings" target="_blank" rel="noopener">토스뱅크 정리</a></p>
 </details>
+
+<section class="card" id="calc">
+  <div class="card-head"><h2>🧮 계산기</h2><span class="muted small">어림셈 · 입력값은 이 화면에만 (저장 안 함)</span></div>
+  <details class="sub-fold" id="calc-pension" open><summary>연금저축·IRP 세액공제 환급액</summary>
+    <div class="calc" data-calc="pension">
+      <label>총급여 (만 원) <input inputmode="numeric" name="salary" placeholder="예: 7000"></label>
+      <label>연금저축 납입 (만 원) <input inputmode="numeric" name="saving" placeholder="최대 600 공제"></label>
+      <label>IRP 납입 (만 원) <input inputmode="numeric" name="irp"></label>
+      <label>ISA 만기 이전액 (만 원) <input inputmode="numeric" name="isa" placeholder="없으면 0"></label>
+      <label>낸 세금(결정세액, 만 원·선택) <input inputmode="numeric" name="tax" placeholder="원천징수영수증"></label>
+      <output class="calc-out"></output>
+    </div>
+  </details>
+  <details class="sub-fold" id="calc-nps"><summary>국민연금 조기·연기 손익분기 나이</summary>
+    <div class="calc" data-calc="nps">
+      <label>정상 수령 나이 <select name="age"><option>63</option><option>64</option><option selected>65</option></select></label>
+      <label>정상 나이에 받을 월 연금 (만 원) <input inputmode="numeric" name="monthly" placeholder="예: 120"></label>
+      <label>앞당기기·늦추기 <select name="shift"><option value="-5">5년 앞당김 (−30%)</option><option value="-3">3년 앞당김 (−18%)</option><option value="-1">1년 앞당김 (−6%)</option><option value="1">1년 늦춤 (+7.2%)</option><option value="3">3년 늦춤 (+21.6%)</option><option value="5" selected>5년 늦춤 (+36%)</option></select></label>
+      <output class="calc-out"></output>
+      <p class="muted small">물가 반영·이자·세금·건보료는 빼고 받은 돈 합계만 비교합니다. 실제로는 연금액이 매년 물가만큼 오르고, 오래 살수록 늦추는 쪽이 유리합니다.</p>
+    </div>
+  </details>
+  <details class="sub-fold" id="calc-us"><summary>해외주식 양도세 (연 250만 원 공제)</summary>
+    <div class="calc" data-calc="ustax">
+      <label>올해 이미 판 이익 (만 원) <input inputmode="numeric" name="gain"></label>
+      <label>올해 이미 판 손실 (만 원) <input inputmode="numeric" name="loss"></label>
+      <output class="calc-out"></output>
+      <p class="muted small">해외주식끼리 그해 이익과 손실을 합칩니다. 연말 전에 공제가 남은 만큼 이익 종목을 팔았다 다시 사면 취득가가 올라가 나중 세금이 줄어듭니다(수수료·환전비 고려).</p>
+    </div>
+  </details>
+</section>
 
 <details class="card fold" id="retire">
   <summary><b>퇴직연금 (DB · DC · IRP)</b></summary>
@@ -64,7 +123,7 @@
       <b>21년차부터 50%</b>(2026년 수령분부터 새로 생김). 일시금보다 30~50% 아낌.</li>
     <li>DB → DC 전환은 할 수 있지만 DC → DB는 보통 안 됩니다. 임금피크제 직전에 DC로 바꾸는 경우가 많습니다.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000289544" target="_blank" rel="noopener">SBS Biz 퇴직소득세 감면 확대</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000289544" target="_blank" rel="noopener">SBS Biz 퇴직소득세 감면 확대</a></p>
 </details>
 
 <details class="card fold" id="isa">
@@ -73,16 +132,16 @@
     <li><b>가입</b>: 만 19세 이상 거주자 (직전 해 근로소득이 있으면 만 15세부터). 최근 3년 중 한 번이라도 금융소득종합과세(이자+배당 2,000만 원 초과)였으면 못 듦. 1인 1계좌.</li>
     <li><b>종류</b>: <b>중개형</b>(국내 주식·국내 상장 ETF·리츠·채권을 직접 매매), 신탁형(예금 등), 일임형(맡김). 해외 주식은 직접 못 사고, 국내에 상장된 해외 ETF로.</li>
     <li><b>한도</b>: 연 2,000만 원, 총 1억 원. 못 채운 한도는 다음 해로 넘어감.
-      <b>확인 필요</b>: 2026 세제개편 정부안에 일반 ISA의 '남은 한도 이월 폐지'와 '계약 최대 5년'이 들어 있어(국회 심의 중) 바뀔 수 있음.</li>
+      (2026-08 정부안에 있던 '이월 폐지·계약 최대 5년'은 2026-09-01 수정안에서 <b>철회</b>됨 — 지금 규칙 그대로.)</li>
     <li><b>세금</b>: 계좌 안 손익을 합쳐서(손익통산) 순수익 <b>200만 원</b>(서민형·농어민 <b>400만 원</b>)까지 비과세, 넘는 부분은 <b>9.9%</b> 분리과세 (일반 계좌는 15.4%, 금융소득종합과세에도 안 들어감).
       서민형: 총급여 5,000만 원 이하 또는 종합소득 3,800만 원 이하.</li>
     <li><b>의무 기간 3년</b>. 그 전에 해지하면 혜택을 토해냄. 넣은 원금 안에서는 중간에 빼도 됨 (빼도 한도는 다시 안 생김).</li>
     <li><b>만기 활용</b>: 만기 후 60일 안에 연금저축·IRP로 옮기면 옮긴 돈의 10%(최대 300만 원)를 그해 세액공제 대상 납입액에 더해 줍니다. 그다음 새 ISA를 열면 3년마다 반복.</li>
     <li><b>확인 필요 — 2027 '생산적금융 ISA'</b>: 정부안(2026-09 국무회의)은 연 2,000만·총 2억 원 새 ISA를 2027년 1월부터 두는 내용입니다
-      (국내 자산 위주, 2029년 말까지 가입). 국회 통과 전이라 확정이 아닙니다.
+      (국내 자산 위주, 처음 안의 '최대 10년·2029년 말 일몰'은 수정안에서 빠짐). 국회 통과 전이라 확정이 아닙니다.
       '2026년부터 한도 4,000만 원' 같은 글이 많지만, 2024년에 나온 확대안은 국회에서 통과되지 못했습니다.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://www.taxnet.co.kr/contents/taxnetpost/post-detail?id=4904" target="_blank" rel="noopener">택스넷 2026 세제개편 ISA</a> · <a href="https://www.donbase.com/posts/isa-tax-reform-2026" target="_blank" rel="noopener">돈베이스 ISA 확정·미확정</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://www.taxnet.co.kr/contents/taxnetpost/post-detail?id=4904" target="_blank" rel="noopener">택스넷 2026 세제개편 ISA</a> · <a href="https://www.donbase.com/posts/isa-tax-reform-2026" target="_blank" rel="noopener">돈베이스 ISA 확정·미확정</a></p>
 </details>
 
 <details class="card fold" id="nps">
@@ -100,19 +159,19 @@
   <ul class="small">
     <li><b>조기노령연금</b>: 1년 앞당길 때마다 <b>6% 감액</b> (5년이면 30%, 평생). 소득 있는 일(월 소득이 A값 초과)을 하면 못 받음.</li>
     <li><b>연기연금</b>: 최대 5년 늦추면 1년에 <b>7.2%</b>씩 늘어 최대 <b>36%</b>. 오래 살 것 같고 다른 소득이 있으면 유리.</li>
-    <li><b>일하면서 받으면(재직자 감액)</b>: 2026년 6월부터 월평균 소득이 'A값 + 200만 원'(2026년 약 <b>519만 원</b>) 이상일 때만 깎임.
+    <li><b>일하면서 받으면(재직자 감액)</b>: 2026-06-17 시행(2026년 1월 이후 소득부터 적용) — 월평균 소득이 'A값 + 200만 원'(2026년 약 <b>519만 원</b>) 이상일 때만 깎임.
       여기서 소득은 월급이 아니라 <b>근로소득금액(총급여 − 근로소득공제)</b>이라, 근로소득만 있으면 연봉 약 7,600만 원은 넘어야 깎입니다.
       깎이는 기간은 받기 시작한 뒤 <b>5년</b>뿐이고 최대 연금의 절반까지. A값(가입자 평균소득) 2026년 3,193,511원.</li>
     <li><b>2026 개혁</b>: 보험료율 9% → <b>2026년 9.5%</b>, 매년 0.5%p씩 올라 2033년 13% (직장인 본인 부담은 절반, 2026년 4.75%).
       소득대체율 <b>43%</b> (2026년 이후 가입기간분부터, 과거분은 그대로). 출산크레딧 첫째부터, 군복무크레딧 6→12개월, 국가 지급 보장 법에 명시.
       2026-10 국회 통과: <b>2027년 전역자부터 군복무 기간 전체 인정</b>, 둘째 출산크레딧 12→15개월 (2027-01 시행).</li>
-    <li>기준소득월액 상한은 매년 7월 바뀜 (2026년 7월부터 약 659만 원). 소득이 상한보다 높아도 보험료는 상한 기준.</li>
+    <li>기준소득월액은 매년 7월 바뀜 — 2026-07~2027-06 상한 659만 원·하한 41만 원. 소득이 상한보다 높아도 보험료는 상한 기준.</li>
     <li><b>세금</b>: 2002년 이후 낸 보험료로 받는 부분은 연금소득으로 과세 (공단이 원천징수, 다음 해 1월 연말정산). 소득이 적으면 거의 없음.</li>
     <li><b>기초연금</b>(65세 이상, 소득 하위 70%)은 국민연금과 별개. 국민연금이 많으면 일부 깎일 수 있음. 금액은 해마다 바뀜.</li>
     <li><b>건강보험 피부양자</b>: 국민연금 같은 공적연금이 연 2,000만 원(월 약 167만 원)을 넘으면 피부양자에서 빠집니다. 연기연금·추납으로 연금을 늘릴 때 같이 보세요.</li>
     <li>내 예상 연금액: 국민연금공단 '내 곁에 국민연금' 앱 또는 홈페이지 → 예상연금 조회.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://www.nps.or.kr/pnsinfo/ntpsklg/getOHAF0056M0.do" target="_blank" rel="noopener">국민연금공단 재직자 감액</a> · <a href="https://www.fnnews.com/news/202610011713397912" target="_blank" rel="noopener">파이낸셜뉴스 군복무크레딧</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://www.nps.or.kr/pnsinfo/ntpsklg/getOHAF0056M0.do" target="_blank" rel="noopener">국민연금공단 재직자 감액</a> · <a href="https://www.fnnews.com/news/202610011713397912" target="_blank" rel="noopener">파이낸셜뉴스 군복무크레딧</a></p>
 </details>
 
 <details class="card fold" id="stocktax">
@@ -135,9 +194,10 @@
     <li>대주주 기준: 2025년 정부가 10억 원으로 낮추려다 9월에 <b>50억 원 유지</b>로 결정. 판단은 직전 해 말일 보유액 기준(가족 합산 없음, 최대주주는 특수관계인 합산).</li>
     <li>해외주식 절세: 이익 난 종목은 연말에 250만 원 공제 안에서 팔고 다시 사서 취득가를 올려 둠. 손실 종목을 같이 팔면 이익과 상계.</li>
     <li><b>RIA (국내시장복귀계좌) — 올해 12월 31일 마감</b>: 2025-12-23 전부터 가진 해외주식을 이 계좌에서 <b>2026-12-31까지</b> 팔고 국내 자산에 두면,
-      매도금액 5,000만 원까지 양도세를 50% 줄여 줍니다 (1년 보유 의무 등 조건은 증권사에서 확인).</li>
+      매도금액 5,000만 원까지 양도세를 50% 줄여 줍니다(하반기 공제율). 판 돈을 국내 자산에 <b>1년 유지</b>해야 하고,
+      그 사이 일반 계좌로 해외주식을 다시 사면 공제가 깎입니다 — 조건은 증권사에서 확인.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000259536" target="_blank" rel="noopener">SBS Biz 대주주 50억 유지</a> · <a href="https://v.daum.net/v/20251231105400803" target="_blank" rel="noopener">다음 뉴스 거래세·배당 분리과세</a> · <a href="https://kbthink.com/investment/issues/ria.html" target="_blank" rel="noopener">KB 씽크 RIA</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000259536" target="_blank" rel="noopener">SBS Biz 대주주 50억 유지</a> · <a href="https://v.daum.net/v/20251231105400803" target="_blank" rel="noopener">다음 뉴스 거래세·배당 분리과세</a> · <a href="https://kbthink.com/investment/issues/ria.html" target="_blank" rel="noopener">KB 씽크 RIA</a></p>
 </details>
 
 <details class="card fold" id="tax">
@@ -154,7 +214,7 @@
     <li><b>세율표(종합소득세)</b>: 1,400만 원 이하 6% · 5,000만 15% · 8,800만 24% · 1.5억 35% · 3억 38% · 5억 40% · 10억 42% · 초과 45% (지방세 10% 별도).</li>
     <li><b>증여</b>: 10년 합산 비과세 한도 — 배우자 6억, 성인 자녀 5,000만(미성년 2,000만), 부모 5,000만, 기타 친족 1,000만. 혼인·출산 공제 1억 별도. 아이 명의 주식 계좌는 증여 신고(홈택스)를 해 두면 나중 수익이 아이 것으로 인정.</li>
   </ul>
-  <p class="muted small src">확인 2026-11-23 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000344066" target="_blank" rel="noopener">SBS Biz 사적연금 건보료 검토</a> · <a href="https://www.nhis.or.kr" target="_blank" rel="noopener">국민건강보험공단</a></p>
+  <p class="muted small src">확인 2026-11-24 · 출처: <a href="https://biz.sbs.co.kr/amp/article/20000344066" target="_blank" rel="noopener">SBS Biz 사적연금 건보료 검토</a> · <a href="https://www.nhis.or.kr" target="_blank" rel="noopener">국민건강보험공단</a></p>
 </details>
 
 <details class="card fold" id="econ">

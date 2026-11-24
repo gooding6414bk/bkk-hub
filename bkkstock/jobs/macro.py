@@ -13,11 +13,13 @@ import pandas as pd
 
 from ..clients.base import ApiError
 from ..clients.ecos import SERIES as ECOS_SERIES
+from ..clients.fred import SERIES as FRED_SERIES
 from ..clients.overseas import MACRO_SYMBOLS
 from ..timeutil import iso_kst, now_kst
 from .common import Ctx
 
-YAHOO_SERIES = {"^TNX": ("us_10y", "%"), "^VIX": ("vix", ""), "DX-Y.NYB": ("dxy", "")}
+YAHOO_SERIES = {"^TNX": ("us_10y", "%"), "^VIX": ("vix", ""), "DX-Y.NYB": ("dxy", ""), "^GSPC": ("spx", ""),
+                "^IXIC": ("nasdaq", "")}
 
 
 def collect(ctx: Ctx) -> dict:
@@ -37,6 +39,16 @@ def collect(ctx: Ctx) -> dict:
                 msgs.append(f"{name}: {e.code}")
     else:
         msgs.append("ECOS 키 없음 (한국 금리·환율·물가 건너뜀)")
+    for sid, (name, cycle) in FRED_SERIES.items():       # 미국 거시 (키 없음)
+        start = today - dt.timedelta(days=760 if cycle == "M" else 400)
+        try:
+            for r in ctx.fred.history(sid, start):
+                period = r["period"][:7] if cycle == "M" else r["period"]
+                rows.append({"source": "fred", "series": name, "label": sid, "unit": "", "freq": cycle,
+                             "period": period, "value": r["value"], "fetched_at": fetched})
+        except ApiError as e:
+            bad.append(sid)
+            msgs.append(f"{sid}: {e.code}")
     yrows, yfail = ctx.overseas.macro_history("1y")
     for r in yrows:
         name, unit = YAHOO_SERIES[r["symbol"]]

@@ -111,7 +111,8 @@ def build(acc: dict, year: int, ytd_label: str | None, div: dict) -> dict:
     if last["roe"] is not None:
         bits.append(f"ROE {last['roe']:.0f}%")
     warns = []
-    if last["debt"] is not None and last["debt"] > 200:
+    financial = v.get("sales") is None              # 은행·보험·증권: 매출액 계정이 없음 — 부채비율이 원래 높아 경고하지 않는다
+    if last["debt"] is not None and last["debt"] > 200 and not financial:
         warns.append(f"부채비율 {last['debt']:.0f}% — 200% 넘음")
     if last["net"] is not None and last["net"] < 0:
         warns.append(f"{year}년 순손실")
@@ -127,7 +128,7 @@ def build(acc: dict, year: int, ytd_label: str | None, div: dict) -> dict:
             g = lambda k: (div.get(k) or [None] * 3)[i]  # noqa: E731
             dv.append({"year": yy, "dps": g("dps"), "payout": g("payout"), "yield": g("yield")})
     return {"years": rows, "summary": " · ".join(bits), "warns": warns, "ytd": ytd, "div": dv,
-            "fs": "연결" if acc["fs"] == "CFS" else "별도", "financial": v.get("sales") is None}
+            "fs": "연결" if acc["fs"] == "CFS" else "별도", "financial": financial}
 
 
 def fetch(ctx, code: str, today: dt.date) -> dict:

@@ -8,6 +8,7 @@ import pytest
 from bkkstock.analysis import macro
 from bkkstock.clients.base import ApiError
 from bkkstock.clients.ecos import EcosClient
+from bkkstock.clients.fred import FredClient
 from bkkstock.clients.overseas import OverseasClient
 from bkkstock.jobs.common import make_ctx
 from bkkstock.redact import redact
@@ -67,7 +68,7 @@ def test_overseas_one_symbol_failing_does_not_stop_others(settings, store):
     rows = ov.all_history("5d")
     assert {r["symbol"] for r in rows} == {"EWY", "^IXIC", "KRW=X"}            # 반도체만 빠지고 예측가용 EWY 는 남음
     mrows, failed = ov.macro_history("5d")
-    assert {r["symbol"] for r in mrows} == {"^TNX", "^VIX", "DX-Y.NYB"} and failed == []
+    assert {r["symbol"] for r in mrows} == {"^TNX", "^VIX", "DX-Y.NYB", "^GSPC", "^IXIC"} and failed == []
 
 
 def _seed_macro(store, today):
@@ -103,10 +104,10 @@ def test_view_cards_change_position_and_cpi_yoy(store):
 def test_stale_and_jump_flags(store):
     today = dt.date(2026, 11, 24)
     rows = [{"source": "yahoo", "series": "vix", "label": "VIX", "unit": "", "freq": "D", "period": d, "value": val,
-             "fetched_at": ""} for d, val in (("2026-10-01", 15.0), ("2026-10-02", 15.2), ("2026-11-02", 30.0))]
+             "fetched_at": ""} for d, val in (("2026-10-01", 15.0), ("2026-10-02", 15.2), ("2026-11-02", 31.0))]
     store.write_clean("macro", today, pd.DataFrame(rows))
     c = {c["name"]: c for g in macro.view(store, today)["groups"] for c in g["cards"]}["vix"]
-    assert c["stale"] and c["jump"]                     # 3주 넘게 안 바뀜 · 하루 +97%
+    assert c["stale"] and c["jump"]                     # 3주 넘게 안 바뀜 · 하루 +104% (VIX 기준 60% 넘음)
 
 
 def test_option_expiry_and_events():
@@ -118,12 +119,38 @@ def test_option_expiry_and_events():
     assert "FOMC" in macro.schedule_gap(dt.date(2027, 8, 1))                # 2027 10월 이후 FOMC 를 넣어야 함
 
 
-def test_collect_without_ecos_key_still_saves_yahoo(settings, store, monkeypatch):
+def _fred(fail=()):
+    def handler(req):
+        sid = req.url.params["id"]
+        if sid in fail:
+            return httpx.Response(500, text="err")
+        if sid in ("CPIAUCSL", "CPILFESL", "UNRATE"):
+            body = "observation_date," + sid + "\n" + "\n".join(f"{y}-{m:02d}-01,{100 + (y - 2024) * 12 + m}" for y in (2024, 2025, 2026) for m in range(1, 13))
+        else:
+            body = f"observation_date,{sid}\n2026-11-19,4.70\n2026-11-20,.\n2026-11-21,4.63\n"
+        return httpx.Response(200, text=body)
+    return handler
+
+
+def test_fred_csv_parse_and_empty_values(settings, store):
+    f = FredClient(settings, store, http=httpx.Client(transport=httpx.MockTransport(_fred())))
+    assert f.history("DGS2", dt.date(2026, 11, 1)) == [{"period": "2026-11-19", "value": 4.7}, {"period": "2026-11-21", "value": 4.63}]
+    bad = FredClient(settings, store, http=httpx.Client(transport=httpx.MockTransport(_fred(fail=("DGS2",)))))
+    with pytest.raises(ApiError):
+        bad.history("DGS2", dt.date(2026, 11, 1))
+
+
+def test_collect_without_ecos_key_still_saves_yahoo_and_fred(settings, store, monkeypatch):
     ctx = make_ctx(settings)
     ctx.overseas.http = httpx.Client(transport=httpx.MockTransport(_yahoo()))
+    ctx.fred.http = httpx.Client(transport=httpx.MockTransport(_fred(fail=("UNRATE",))))
     from bkkstock.jobs import macro as job
     r = job.collect(ctx)
-    assert r["status"] == "ok" and r["rows"] == 9 and "ECOS 키 없음" in r["note"]
+    assert r["status"] == "partial" and r["failed"] == ["UNRATE"] and "ECOS 키 없음" in r["note"]
     df = ctx.store.read_clean("macro", ctx.store.latest_clean_day("macro"))
-    assert set(df["series"]) == {"us_10y", "vix", "dxy"}
-    assert job.safe_collect(ctx).startswith("ok")
+    assert {"us_10y", "vix", "dxy", "spx", "nasdaq", "us_fed", "us_2y", "us_spread", "us_cpi", "us_core_cpi"} == set(df["series"])
+    assert set(df[df["series"] == "us_cpi"]["period"].str.len()) == {7}           # 월간은 YYYY-MM
+    v = macro.view(ctx.store, dt.date(2026, 11, 24))
+    cards = {c["name"]: c for g in v["groups"] for c in g["cards"]}
+    assert not cards["us_cpi_yoy"]["empty"] and not cards["us_2y"]["empty"] and cards["us_unrate"]["empty"]
+    assert job.safe_collect(ctx).startswith("partial")

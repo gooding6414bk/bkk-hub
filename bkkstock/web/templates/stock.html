@@ -46,21 +46,9 @@
   <a href="#s-fin">재무</a><a href="#s-div">배당</a><a href="#s-news">뉴스</a><a href="#s-disc">공시</a><a href="#forecast">예측</a>
 </nav>
 
-<section class="card" id="s-risk">
-  <div class="card-head"><h2>위험 표시 · 점수 근거</h2><span class="muted small">참고 점수는 1개월 남짓 기울기 · 검증 전</span></div>
-  {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}">{% if f.level in ('block', 'warn') %}{{ m.chip(f) }}{% else %}<span class="chip info">ℹ {{ f.kind }}</span>{% endif %} {{ f.text }}</li>{% endfor %}</ul>
-  {% else %}<p class="muted small">{{ '회피 엔진이 찾은 위험이 없습니다.' if o else '점수 계산 전이라 판정하지 못했습니다.' }}</p>{% endif %}
-  <details class="sub-fold"><summary>점수 근거 {% if o and o.enough_history %}<span class="muted small">{{ m.grade_name(o.score) }} {{ '%+.0f' % o.score }}</span>{% endif %}</summary>
-    {% if o and o.enough_history %}
-      <ul class="bars">
-      {% for b in s.comps %}<li><span class="bl">{{ b.label }}</span><span class="bar"><i class="{{ 'neg' if b.neg else 'pos' }}" style="--w: {{ b.pct }}%"></i></span><b class="bv num">{{ '%+.1f' % b.value }}</b></li>{% endfor %}
-      </ul>
-    {% else %}<p class="empty">점수를 내려면 21거래일 이상 시세 이력이 필요합니다.</p>{% endif %}
-    {% if s.score_spark %}<h3>점수 흐름 <span class="muted small">{{ s.n_score_days }}일 · 처음 {{ '%+.0f' % s.spark_first }} → 지금 {{ '%+.0f' % s.spark_last }}</span></h3>{{ s.score_spark | safe }}{% endif %}
-  </details>
-</section>
-
-<section class="card" id="s-chart">
+<div class="stock-2col">
+<div class="col-main">
+<section class="card o3" id="s-chart">
   <div class="card-head"><h2>차트 <span class="muted small">{{ st.days or 0 }}거래일 · 수정주가</span></h2>
     <div class="ma-legend"><span><i style="background:#f59e0b"></i>5일</span><span><i style="background:#8b5cf6"></i>20일</span><span><i style="background:#10b981"></i>60일 이동평균</span><span><i style="background:var(--c-vol)"></i>거래대금</span><span><i style="background:var(--c-nxt)"></i>NXT</span><span><i class="dotm"></i>재료 없는 급등</span></div></div>
   <div class="chart-wrap">{{ s.chart | safe }}</div>
@@ -77,51 +65,24 @@
   </details>
 </section>
 
-<section class="card" id="s-flow">
-  <div class="card-head"><h2>수급</h2><span class="muted small">{% if s.flow %}KRX+NXT 통합 · {{ s.flow.days }}거래일 자료{% endif %}</span></div>
-  {% if s.flow %}
-  {% set fl = s.flow %}
-  <p class="streak">{% for who in ('외국인', '기관', '개인') %}{% set k = fl.streak.get(who, 0) %}{{ who }} {% if k > 0 %}<b>{{ k }}일 연속 순매수</b>{% elif k < 0 %}<b>{{ -k }}일 연속 순매도</b>{% else %}–{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-  <div class="tbl-wrap"><table class="tbl compact flow-tbl">
-    <thead><tr><th>주체</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일 순매수</th><th class="num p{{ p.days }} pv">거래대금 대비</th>{% endfor %}</tr></thead>
-    <tbody>
-    {% for who in ['외국인', '기관', '개인'] + (fl.other_names or []) %}<tr><td><b>{{ who }}</b></td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td><td class="num p{{ p.days }} pv">{{ pc(g.pct_value if g else none, 1) }}</td>{% endfor %}</tr>{% endfor %}
-    </tbody>
-  </table></div>
-  <details class="sub-fold"><summary>기관 세부 <span class="muted small">{{ fl.inst_names | join(' · ') }}</span></summary>
-  <div class="tbl-wrap"><table class="tbl compact flow-tbl">
-    <thead><tr><th>기관</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일</th>{% endfor %}</tr></thead>
-    <tbody>{% for who in fl.inst_names %}<tr><td>{{ who }}</td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-  </table></div></details>
-  <p class="muted small">거래대금 대비 = 그 기간 순매수 ÷ 그 기간 전체 거래대금. 시가총액 대비 {% for p in fl.periods if p.days == 20 %}(20일): 외국인 {{ pc(p.groups['외국인'].pct_mktcap, 2) }}, 기관 {{ pc(p.groups['기관'].pct_mktcap, 2) }}{% endfor %}.</p>
-  <details class="sub-fold"><summary>누적 순매수 그래프 <span class="muted small">억 원</span></summary>{{ s.flow_chart | safe }}</details>
-  {% else %}<p class="empty">수급 자료가 아직 없습니다. 한국투자증권 키가 있으면 매일 저녁 쌓이고, 관심 종목은 '과거 데이터 채우기'로 30일치를 받습니다.</p>{% endif %}
-  {% if s.sc %}
-  <div class="kv2">
-    {% if s.sc.short_ratio is not none %}<div><span>공매도 거래량 비중 ({{ s.sc.short_date }})</span>{{ '%.2f%%' % s.sc.short_ratio }}</div>{% endif %}
-    {% if s.sc.credit_rate is not none %}<div><span>신용 잔고율 ({{ s.sc.credit_date }})</span>{{ '%.2f%%' % s.sc.credit_rate }}</div>{% endif %}
-  </div>
-  {% endif %}
-</section>
-
-<section class="card" id="s-fin">
+<section class="card o5" id="s-fin">
   <div class="card-head"><h2>재무</h2><span class="muted small">OpenDART 사업보고서 · 확정 실적만</span></div>
   <div id="fin" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
   <p class="caveat">증권사 추정치·목표가는 넣지 않습니다(보드 원칙). 은행·보험은 매출 계정이 달라 일부 칸이 빕니다.</p>
 </section>
 
-<section class="card" id="s-div">
+<section class="card o6" id="s-div">
   <div class="card-head"><h2>배당</h2><span class="muted small">보통주 · 사업보고서 기준</span></div>
   <div id="divs"><p class="muted">불러오는 중…</p></div>
 </section>
 
-<section class="card" id="s-news">
+<section class="card o7" id="s-news">
   <div class="card-head"><h2>뉴스</h2><button class="ghost" id="news-reload" data-code="{{ s.code }}">새로 받기</button></div>
   <div id="news" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
   <p class="caveat">제목 단어로 호재·악재를 나눕니다(근거 단어 표시, 틀릴 수 있음). 같은 소식은 묶어서 셉니다. 뉴스는 대개 이미 가격에 반영돼 있어 참고 점수에는 넣지 않습니다.</p>
 </section>
 
-<section class="card" id="s-disc">
+<section class="card o8" id="s-disc">
   <div class="card-head"><h2>공시</h2><a class="pill" href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm={{ s.name | urlencode }}" target="_blank" rel="noopener">DART에서 보기</a></div>
   {% if s.disc_sum.n %}
   <p class="small">최근 공시 {{ s.disc_sum.n }}건 · {% for b in s.disc_bar %}{{ b.label }} {{ '%.0f' % b.pct }}%{% if not loop.last %} · {% endif %}{% endfor %}{% if s.disc_sum.tags %} · {% for t, k in s.disc_sum.tags[:5] %}{{ t }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</p>
@@ -135,7 +96,7 @@
   </ul>{% else %}<p class="empty">저장된 공시가 없습니다.</p>{% endif %}
 </section>
 
-<details class="card fold" id="forecast">
+<details class="card o9 fold" id="forecast">
   <summary><b>🌙 내일 예측가</b> <span class="muted small">참고값 · 접어 둠{% if fc and s.fc_state == 'ok' %} · {{ fc.target.month }}/{{ fc.target.day }} 종가 보통 범위 {{ fc.lo1 | num }}~{{ fc.hi1 | num }}{% endif %}</span></summary>
   {% if s.fc_state == 'none' %}<p class="empty">시세 이력이 없어 계산할 수 없습니다.</p>
   {% elif s.fc_state == 'blocked' %}<p class="empty">매수 금지 종목이라 예측가를 보이지 않습니다.</p>
@@ -165,4 +126,48 @@
   </details>
   {% endif %}
 </details>
+</div>
+<div class="aside">
+<section class="card o2" id="s-risk">
+  <div class="card-head"><h2>위험 표시 · 점수 근거</h2><span class="muted small">참고 점수는 1개월 남짓 기울기 · 검증 전</span></div>
+  {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}">{% if f.level in ('block', 'warn') %}{{ m.chip(f) }}{% else %}<span class="chip info">ℹ {{ f.kind }}</span>{% endif %} {{ f.text }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted small">{{ '회피 엔진이 찾은 위험이 없습니다.' if o else '점수 계산 전이라 판정하지 못했습니다.' }}</p>{% endif %}
+  <details class="sub-fold"><summary>점수 근거 {% if o and o.enough_history %}<span class="muted small">{{ m.grade_name(o.score) }} {{ '%+.0f' % o.score }}</span>{% endif %}</summary>
+    {% if o and o.enough_history %}
+      <ul class="bars">
+      {% for b in s.comps %}<li><span class="bl">{{ b.label }}</span><span class="bar"><i class="{{ 'neg' if b.neg else 'pos' }}" style="--w: {{ b.pct }}%"></i></span><b class="bv num">{{ '%+.1f' % b.value }}</b></li>{% endfor %}
+      </ul>
+    {% else %}<p class="empty">점수를 내려면 21거래일 이상 시세 이력이 필요합니다.</p>{% endif %}
+    {% if s.score_spark %}<h3>점수 흐름 <span class="muted small">{{ s.n_score_days }}일 · 처음 {{ '%+.0f' % s.spark_first }} → 지금 {{ '%+.0f' % s.spark_last }}</span></h3>{{ s.score_spark | safe }}{% endif %}
+  </details>
+</section>
+
+<section class="card o4" id="s-flow">
+  <div class="card-head"><h2>수급</h2><span class="muted small">{% if s.flow %}KRX+NXT 통합 · {{ s.flow.days }}거래일 자료{% endif %}</span></div>
+  {% if s.flow %}
+  {% set fl = s.flow %}
+  <p class="streak">{% for who in ('외국인', '기관', '개인') %}{% set k = fl.streak.get(who, 0) %}{{ who }} {% if k > 0 %}<b>{{ k }}일 연속 순매수</b>{% elif k < 0 %}<b>{{ -k }}일 연속 순매도</b>{% else %}–{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <div class="tbl-wrap"><table class="tbl compact flow-tbl">
+    <thead><tr><th>주체</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일 순매수</th><th class="num p{{ p.days }} pv">거래대금 대비</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for who in ['외국인', '기관', '개인'] + (fl.other_names or []) %}<tr><td><b>{{ who }}</b></td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td><td class="num p{{ p.days }} pv">{{ pc(g.pct_value if g else none, 1) }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <details class="sub-fold"><summary>기관 세부 <span class="muted small">{{ fl.inst_names | join(' · ') }}</span></summary>
+  <div class="tbl-wrap"><table class="tbl compact flow-tbl">
+    <thead><tr><th>기관</th>{% for p in fl.periods %}<th class="num p{{ p.days }}">{{ p.days }}일</th>{% endfor %}</tr></thead>
+    <tbody>{% for who in fl.inst_names %}<tr><td>{{ who }}</td>{% for p in fl.periods %}{% set g = p.groups.get(who) %}<td class="num p{{ p.days }}">{{ eok(g.net if g else none) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div></details>
+  <p class="muted small">거래대금 대비 = 그 기간 순매수 ÷ 그 기간 전체 거래대금. 시가총액 대비 {% for p in fl.periods if p.days == 20 %}(20일): 외국인 {{ pc(p.groups['외국인'].pct_mktcap, 2) }}, 기관 {{ pc(p.groups['기관'].pct_mktcap, 2) }}{% endfor %}.</p>
+  <details class="sub-fold"><summary>누적 순매수 그래프 <span class="muted small">억 원</span></summary>{{ s.flow_chart | safe }}</details>
+  {% else %}<p class="empty">수급 자료가 아직 없습니다. 한국투자증권 키가 있으면 매일 저녁 쌓이고, 관심 종목은 '과거 데이터 채우기'로 30일치를 받습니다.</p>{% endif %}
+  {% if s.sc %}
+  <div class="kv2">
+    {% if s.sc.short_ratio is not none %}<div><span>공매도 거래량 비중 ({{ s.sc.short_date }})</span>{{ '%.2f%%' % s.sc.short_ratio }}</div>{% endif %}
+    {% if s.sc.credit_rate is not none %}<div><span>신용 잔고율 ({{ s.sc.credit_date }})</span>{{ '%.2f%%' % s.sc.credit_rate }}</div>{% endif %}
+  </div>
+  {% endif %}
+</section>
+</div>
+</div>
 {% endblock %}

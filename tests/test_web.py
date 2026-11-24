@@ -56,7 +56,7 @@ def test_pages_render_empty_state(client):
         r = c.get(url)
         assert r.status_code == 200, url
     home = c.get("/").get_data(as_text=True)
-    assert "아직 일일 수집 기록이 없습니다" in home and "📈 주식" in home
+    assert "아직 일일 수집 기록이 없습니다" in home and 'href="/stocks"' in home and ">주식<" in home
     assert 'href="/media"' not in home and "🎬" not in home          # 영상 메뉴는 보드에서 뺐다 (주소는 그대로 열림)
     assert "건우<b>주식</b>" in home and "bkk hub" not in home and "bkk<b>hub" not in home
     for url in ("/", "/stocks", "/apis", "/ops", "/knowledge", "/login"):     # 메인 화면들에 콘텐츠 이름이 드러나지 않는다
@@ -159,7 +159,7 @@ def test_stock_page_with_data_shows_new_sections(client, monkeypatch):
     monkeypatch.setattr(datamod, "now_kst", lambda: dt.datetime(2026, 11, 9, 10, 0, tzinfo=KST))
     assert "장이 이미 시작돼" in c.get("/stocks/000001").get_data(as_text=True)
     home = c.get("/").get_data(as_text=True)
-    assert "오늘 내 종목에서 볼 것" in home and "보유 평가금액" in home
+    assert "오늘 볼 것" in home and "보유 평가금액" in home and "편집" in home
     assert "내일 보통 범위" not in home and "많이 오른 종목" not in home and "거래대금 상위" not in home
     news = c.get("/api/stock/000001/news").get_json()
     assert "summary" in news or "error" in news
@@ -369,7 +369,7 @@ def test_indicators_page_and_home_grid(client):
     page = c.get("/knowledge/indicators").get_data(as_text=True)
     assert "국고채 3년" in page and "1년 중" in page and "1개월" in page
     home = c.get("/").get_data(as_text=True)
-    assert "시장 한눈에" in home and 'href="/knowledge/indicators"' in home
+    assert "시장 한눈에" in home and 'href="/indicators"' in home
     apis = c.get("/apis").get_data(as_text=True)
     assert "한국은행 ECOS" in apis and "ECOS_API_KEY" in apis
 
@@ -398,7 +398,7 @@ def test_spend_dashboard_saves_only_on_server(client):
     assert c.get("/spend").status_code == 302
     login(c)
     home = c.get("/spend").get_data(as_text=True)
-    assert "💳 소비" in home and "지금 뭘로 낼까" in home and "먼저" in home
+    assert 'href="/spend" class="on"' in home and "지금 뭘로 낼까" in home and "먼저" in home
     tok = c.environ_base["HTTP_X_CSRF"]
     r = c.post("/spend/wallet", data={"csrf": tok, "salary": "5000", "children": "0", "base_credit": "1500",
                "c0_id": "", "c0_name": "생활카드", "c0_kind": "신용", "c0_base": "1", "c0_tier": "30", "c0_prev": "on",
@@ -459,3 +459,38 @@ def test_indicator_line_uses_kis_fields(client, monkeypatch):
     c, cx, datamod = _live_setup(client, monkeypatch, handler)
     page = c.get("/stocks/000001").get_data(as_text=True)
     assert "12.3" in page and "1.10" in page and "전기·전자" in page and "51.2%" in page and "52주" in page
+
+
+def test_prefs_edit_and_sort(client):
+    import json
+    c, appmod = client
+    assert c.get("/api/prefs").status_code == 401
+    login(c)
+    p = c.get("/api/prefs").get_json()
+    assert p["home"][0] == ["risk", True] and p["watch"]["sort"] == "own"
+    # 순서 바꾸기·숨기기, 모르는 키·위젯은 버리고 '오늘 볼 것'은 못 숨김
+    r = c.put("/api/prefs", json={"home": [["market", True], ["risk", False], ["pnl", False], ["evil", True]],
+                                  "watch": {"sort": "today_up", "view": "compact"}, "x": 1}).get_json()
+    home = r["prefs"]["home"]
+    assert home[0] == ["market", True] and home[1] == ["risk", True] and home[2] == ["pnl", False]
+    assert {w for w, _ in home} == {"risk", "pnl", "watch", "events", "market", "ind", "alerts", "mktrisk", "status"}
+    assert r["prefs"]["watch"] == {"sort": "own", "view": "compact"}          # 등락률순 같은 모르는 정렬은 무시
+    page = c.get("/").get_data(as_text=True)
+    assert 'id="w-pnl"' not in page and page.index('id="w-market"') < page.index('id="w-events"')
+    c.put("/api/prefs", json={"watch": {"sort": "name"}})
+    assert json.loads(appmod.ctx().store.meta_get("ui.prefs"))["watch"]["sort"] == "name"
+    assert c.put("/api/prefs", json={"reset": True}).get_json()["prefs"]["watch"]["sort"] == "own"
+    assert c.put("/api/prefs", json={}, headers={"X-CSRF": "bad"}).status_code == 403
+
+
+def test_settings_and_indicators_menu(client):
+    c, _ = client
+    login(c)
+    s = c.get("/settings").get_data(as_text=True)
+    assert "API 연결" in s and "홈 화면 편집" in s and "로그아웃" in s and 'href="/ops"' in s
+    ind = c.get("/indicators").get_data(as_text=True)
+    assert "📊 지표" in ind and "💰 금융" not in ind                    # 지표는 1급 메뉴 (지식 탭 아님)
+    home = c.get("/").get_data(as_text=True)
+    for href in ('href="/"', 'href="/stocks"', 'href="/spend"', 'href="/indicators"', 'href="/knowledge"', 'href="/settings"'):
+        assert href in home, href
+    assert "기발해" not in s and "🎬" not in home

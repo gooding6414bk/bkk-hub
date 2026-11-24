@@ -15,11 +15,25 @@ from ..timeutil import is_trading_day
 
 # 화면 묶음. (이름, 무슨 뜻 한 줄, 변화 표시: 'pp'=%p 차이, 'pct'=% 변화)
 GROUPS = [
-    ("💸 금리", "rates", [
+    ("💸 한국 금리", "kr_rates", [
         ("kr_base", "한국은행이 정하는 정책금리. 예금·대출 금리의 바닥.", "pp"),
         ("kr_3y", "앞으로 1~3년 금리 기대. 기준금리보다 높으면 시장은 '더 안 내린다' 쪽.", "pp"),
         ("kr_10y", "장기 금리. 오르면 성장주·리츠·채권 가격에 부담.", "pp"),
+    ]),
+    ("🇺🇸 미국 금리", "us_rates", [
+        ("us_fed", "미국 연준 기준금리(목표 범위 상단). 한국과의 금리 차이가 원/달러와 외국인 자금에 영향.", "pp"),
+        ("us_2y", "앞으로 2년 미국 금리 기대 — 연준이 금리를 어디로 가져갈지에 가장 민감.", "pp"),
         ("us_10y", "전 세계 돈의 기준값. 오르면 성장주가 약해지기 쉽고 달러로 돈이 몰림.", "pp"),
+        ("us_spread", "10년 − 2년. 마이너스(역전)면 경기 둔화 경고로 자주 쓰이지만, 2022~24년 긴 역전에도 침체는 오지 않았음.", "pp"),
+    ]),
+    ("🇺🇸 미국 경제", "us_econ", [
+        ("us_cpi_yoy", "미국 물가 (1년 전 대비). 연준 목표 2%. 높으면 금리 인하가 늦어짐.", "pp"),
+        ("us_core_yoy", "식품·에너지를 뺀 물가. 연준이 더 눈여겨보는 숫자.", "pp"),
+        ("us_unrate", "실업률. 빠르게 오르면 경기 둔화 신호로 읽히고, 금리 인하 기대가 커짐.", "pp"),
+    ]),
+    ("📈 미국 주가", "us_equity", [
+        ("spx", "미국 대형주 500개. 세계 주식의 기준.", "pct"),
+        ("nasdaq", "기술주 중심. 한국 반도체·IT와 같이 움직이는 경우가 많음.", "pct"),
     ]),
     ("💱 환율", "fx", [
         ("usdkrw", "오르면 원화 약세 — 수출주엔 유리, 외국인 자금엔 부담이 되는 경우가 많음.", "pct"),
@@ -30,18 +44,24 @@ GROUPS = [
     ("🌡 위험", "risk", [
         ("vix", "미국 주식 옵션으로 본 '앞으로 흔들림' 기대. 높으면 흔들림이 큰 시기 — 오를지 내릴지는 알려 주지 않음.", "pct"),
     ]),
-    ("🧺 물가", "prices", [
+    ("🧺 한국 물가", "prices", [
         ("kr_cpi_yoy", "1년 전보다 물가가 얼마나 올랐나. 한국은행 목표는 2%. 높으면 금리를 내리기 어려움.", "pp"),
     ]),
 ]
 LABELS = {"kr_base": "한국 기준금리", "kr_3y": "국고채 3년", "kr_10y": "국고채 10년", "us_10y": "미국채 10년",
+          "us_fed": "미국 기준금리", "us_2y": "미국채 2년", "us_spread": "장단기 금리차 (10년−2년)",
+          "us_cpi_yoy": "미국 소비자물가", "us_core_yoy": "미국 근원물가", "us_unrate": "미국 실업률",
+          "spx": "S&P 500", "nasdaq": "나스닥",
           "usdkrw": "원/달러", "jpykrw": "원/엔 (100엔)", "cnykrw": "원/위안", "dxy": "달러인덱스",
           "vix": "VIX", "kr_cpi_yoy": "소비자물가 (1년 전 대비)"}
-UNITS = {"kr_base": "%", "kr_3y": "%", "kr_10y": "%", "us_10y": "%", "usdkrw": "원", "jpykrw": "원", "cnykrw": "원",
-         "dxy": "", "vix": "", "kr_cpi_yoy": "%"}
-SOURCES = {"ecos": "한국은행 ECOS", "yahoo": "야후 파이낸스"}
+UNITS = {"kr_base": "%", "kr_3y": "%", "kr_10y": "%", "us_10y": "%", "us_fed": "%", "us_2y": "%", "us_spread": "%p",
+         "us_cpi_yoy": "%", "us_core_yoy": "%", "us_unrate": "%", "spx": "", "nasdaq": "",
+         "usdkrw": "원", "jpykrw": "원", "cnykrw": "원", "dxy": "", "vix": "", "kr_cpi_yoy": "%"}
+YOY = {"kr_cpi_yoy": "kr_cpi", "us_cpi_yoy": "us_cpi", "us_core_yoy": "us_core_cpi"}   # 지수 → 1년 전 대비 %
+SOURCES = {"ecos": "한국은행 ECOS", "yahoo": "야후 파이낸스", "fred": "FRED (미국 연준)"}
 STALE_DAYS = {"D": 7, "M": 50}           # 일별 자료가 7일, 월별이 50일 넘게 안 바뀌면 '지연'
 JUMP = {"pct": 8.0, "pp": 1.0}           # 하루 이만큼 넘게 튀면 '확인 필요' (지우지 않고 표시만)
+JUMP_BY_SERIES = {"vix": 60.0}           # VIX 는 하루 10~30% 움직임이 흔함
 
 # 다가오는 일정 — 공식 발표를 손으로 넣는다. 날짜는 한국 시각 기준 '결과가 나오는 날'.
 # FOMC 는 미국 2일째 오후 2시(동부) = 한국 다음 날 새벽 3~4시. 10·12월 2027 FOMC 는 출처끼리 달라 비워 둠.
@@ -110,8 +130,8 @@ def _frame(store: Store) -> pd.DataFrame:
 
 def _series(df: pd.DataFrame, name: str) -> tuple[pd.Series, str, str]:
     """(날짜 인덱스 값, 주기, 출처). 물가는 지수 → 1년 전 대비 %로 바꾼다."""
-    if name == "kr_cpi_yoy":
-        s = df[df["series"] == "kr_cpi"]
+    if name in YOY:
+        s = df[df["series"] == YOY[name]]
         if s.empty:
             return pd.Series(dtype=float), "M", ""
         v = s.assign(d=pd.to_datetime(s["period"] + "-01")).set_index("d")["value"].sort_index()
@@ -143,7 +163,7 @@ def card(df: pd.DataFrame, name: str, meaning: str, mode: str, today: dt.date) -
     if freq == "D" and len(s) >= 2:
         prev = float(s.iloc[-2])
         d1 = last_v - prev if mode == "pp" else ((last_v / prev - 1) * 100 if prev else 0)
-        jump = abs(d1) > JUMP[mode]
+        jump = abs(d1) > JUMP_BY_SERIES.get(name, JUMP[mode])
     spark = year.resample("W").last().dropna() if freq == "D" else year
     if freq == "M":                       # 월간 자료는 그달 말 기준으로 지연을 잰다 (10월 물가는 11월 초에 나옴)
         nxt = (last_d.replace(day=28) + dt.timedelta(days=4)).replace(day=1)

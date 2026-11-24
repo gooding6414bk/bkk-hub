@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}설정{% endblock %}
+{% block content %}
+<section class="card flush">
+  <div class="sec-head"><h2>연결과 수집</h2></div>
+  <a class="srow" href="/apis">
+    <span class="logo" style="background:{{ 'var(--danger)' if s.api_bad else 'var(--warn)' if s.api_missing else 'var(--ok)' }}">API</span>
+    <div><div class="nm">API 연결</div>
+      <div class="meta">정상 {{ s.api_ok }}{% if s.api_bad %} · <span class="chip block">오류 {{ s.api_bad | length }}</span>{% endif %}{% if s.api_missing %} · <span class="chip warn">미설정 {{ s.api_missing | length }}</span>{% endif %}</div></div>
+    <span class="c3">›</span></a>
+  <a class="srow" href="/ops">
+    {% set st = s.last.status if s.last else none %}
+    <span class="logo" style="background:{{ 'var(--ok)' if st == 'ok' else 'var(--danger)' if st == 'fail' else 'var(--fg-3)' }}">운</span>
+    <div><div class="nm">운영 · 수집 기록</div>
+      <div class="meta">{% if s.last %}마지막 수집 {{ s.last.day[5:] }} {{ m.st(st) }}{% else %}아직 수집 기록 없음{% endif %} · 버전 {{ (s.deploy.head or '').split(' ')[0] or '–' }}</div></div>
+    <span class="c3">›</span></a>
+  {% if s.alerts_off %}
+  <a class="srow" href="/apis#api-telegram">
+    <span class="logo" style="background:var(--warn)">🔕</span>
+    <div><div class="nm">휴대폰 알림 꺼짐</div><div class="meta">텔레그램을 연결하면 보유 종목 위험 공시가 바로 옵니다</div></div>
+    <span class="c3">›</span></a>
+  {% endif %}
+</section>
+
+<section class="card flush">
+  <div class="sec-head"><h2>화면</h2></div>
+  <a class="srow" href="/?edit=1">
+    <span class="logo" style="background:var(--accent)">홈</span>
+    <div><div class="nm">홈 화면 편집</div><div class="meta">위젯 보이기·숨기기, 순서 바꾸기 (휴대폰·PC 같은 설정)</div></div>
+    <span class="c3">›</span></a>
+  <a class="srow" href="/stocks">
+    <span class="logo" style="background:var(--accent)">★</span>
+    <div><div class="nm">내 종목 정렬·보기</div><div class="meta">내 종목 화면 오른쪽 위 '정렬' 버튼</div></div>
+    <span class="c3">›</span></a>
+</section>
+
+<section class="card">
+  <div class="sec-head"><h2>계정</h2></div>
+  <p class="small c2">비밀번호 바꾸기는 서버에서 <code>python -m bkkstock set-password</code> (다른 기기는 모두 로그아웃됩니다).</p>
+  <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost block">로그아웃</button></form>
+</section>
+<p class="muted small" style="text-align:center">건우주식 · 조회 전용(주문 기능 없음) · 개인용</p>
+{% endblock %}
