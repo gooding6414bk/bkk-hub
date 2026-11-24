@@ -72,4 +72,6 @@ def run(ctx: Ctx, day: dt.date | None = None) -> dict:
         out["alerts"] = send_pending_alerts(ctx)
     except Exception as e:  # noqa: BLE001
         out["alerts"] = f"{type(e).__name__}"
+    # 서버 밖 복사가 실패한 백업은 '부분 실패' — 서버 밖 감시(healthchecks.io) 핑에도 실패로 보낸다
+    out["status"] = "partial" if out["backup"].get("status") == "partial" else "ok"
     return out

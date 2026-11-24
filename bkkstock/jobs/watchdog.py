@@ -38,9 +38,45 @@ HEALTH_CODES = {
     "daily_failed": "직전 거래일(또는 오늘 22시 뒤) 일일 수집이 실패했거나 기록이 없음",
     "dart_stale": "장중 공시 조회가 40분 넘게 성공하지 못함",
     "krx_pending": "10시가 지났는데 직전 거래일 KRX 시세를 아직 못 받음",
-    "backup_stale": "백업이 36시간 넘게 성공하지 못함",
+    "backup_stale": "직전 평일 21시 백업이 없음 (12시간 여유)",
     "disk_low": "디스크 여유 10% 미만",
+    "deploy_stale": "자동 업데이트가 하루 넘게 새 커밋을 못 받았거나 저장소에 연결하지 못함",
 }
+DEPLOY_STALE_SEC = 86400
+
+
+def deploy_state(data_dir) -> dict:
+    """deploy/update.sh 가 남긴 data/update.state. 없으면 {} (설치 전·시험 환경)."""
+    try:
+        text = (data_dir / "update.state").read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    out = {}
+    for line in text.splitlines():
+        k, _, v = line.partition("=")
+        if k:
+            out[k.strip()] = v.strip()
+    return out
+
+
+def deploy_stale(st: dict, now_ts: float) -> bool:
+    def num(k):
+        try:
+            return float(st.get(k) or 0)
+        except ValueError:
+            return 0.0
+    if not st:
+        return False
+    fetch_ok, behind = num("fetch_ok"), num("behind_since")
+    return (fetch_ok and now_ts - fetch_ok > DEPLOY_STALE_SEC) or bool(behind and now_ts - behind > DEPLOY_STALE_SEC)
+
+
+def backup_due(now: dt.datetime) -> dt.datetime:
+    """지금 이미 끝났어야 할 가장 최근 백업 차례(평일 21:00 + 12시간 여유가 지난 것)."""
+    slot = now.replace(hour=21, minute=0, second=0, microsecond=0)
+    while slot.weekday() >= 5 or slot + dt.timedelta(hours=12) > now:
+        slot -= dt.timedelta(days=1)
+    return slot
 
 
 def health(ctx: Ctx) -> tuple[bool, dict]:
@@ -76,10 +112,16 @@ def health(ctx: Ctx) -> tuple[bool, dict]:
             if now - dt.datetime.fromisoformat(rows[0]["finished_at"]) > dt.timedelta(minutes=40):
                 codes.append("dart_stale")
     # 4) 백업
-    b = ctx.store.query("SELECT finished_at FROM job_runs WHERE job='backup' AND status='ok' ORDER BY id DESC LIMIT 1")
-    if b and b[0]["finished_at"] and now - dt.datetime.fromisoformat(b[0]["finished_at"]) > dt.timedelta(hours=36):
+    # 백업은 평일 21:00 일일 보고 때만 돈다 → '36시간'으로 보면 주말마다 거짓 경보(일 09시~월 21시).
+    # 12시간 여유를 둔 가장 최근 평일 21:00 차례의 백업이 있는지만 본다.
+    b = ctx.store.query("SELECT finished_at FROM job_runs WHERE job='backup' AND status IN ('ok','partial') "
+                        "ORDER BY id DESC LIMIT 1")
+    if b and b[0]["finished_at"] and dt.datetime.fromisoformat(b[0]["finished_at"]) < backup_due(now) - dt.timedelta(hours=2):
         codes.append("backup_stale")
-    # 5) 디스크
+    # 5) 자동 업데이트가 멈췄는지 (텔레그램이 없어도 밖에서 보이게)
+    if deploy_stale(deploy_state(ctx.store.data_dir), now.timestamp()):
+        codes.append("deploy_stale")
+    # 6) 디스크
     try:
         du = shutil.disk_usage(ctx.store.data_dir)
         if du.free / du.total < 0.10:

@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import fcntl
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,7 @@ MASTER_URLS = {
 }
 RATE_LIMIT_CODES = {"EGW00201"}           # 초당 거래건수 초과
 TOKEN_EXPIRED_CODES = {"EGW00123", "EGW00121"}
+_TOKEN_THREAD_LOCK = threading.Lock()
 
 
 class KisClient:
@@ -68,6 +71,23 @@ class KisClient:
     def token(self, force: bool = False) -> str:
         self._require()
         cached = self._load_token()
+        if cached and not force and dt.datetime.fromisoformat(cached["expires_at"]) - now_kst() > dt.timedelta(hours=1):
+            return cached["access_token"]
+        # 발급은 한 번에 하나만 — 웹의 여러 요청·수집 작업이 동시에 받으면 '1분 1회' 제한에 걸린다.
+        # 프로세스 안은 스레드 잠금, 프로세스 사이(웹 ↔ 타이머 작업)는 파일 잠금. 잠금을 얻은 뒤 파일을 다시 읽는다.
+        with _TOKEN_THREAD_LOCK:
+            lock_f = open(self.token_path.with_suffix(".lock"), "w")
+            try:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                fresh = self._load_token()
+                if fresh and (not cached or fresh.get("access_token") != cached.get("access_token")):
+                    if dt.datetime.fromisoformat(fresh["expires_at"]) - now_kst() > dt.timedelta(hours=1):
+                        return fresh["access_token"]      # 기다리는 동안 다른 쪽이 새로 받았다
+                return self._issue(fresh, force)
+            finally:
+                lock_f.close()
+
+    def _issue(self, cached: dict | None, force: bool) -> str:
         if cached and not force:
             exp = dt.datetime.fromisoformat(cached["expires_at"])
             if exp - now_kst() > dt.timedelta(hours=1):
@@ -159,7 +179,7 @@ class KisClient:
         """현재가. quick=True 는 화면용 — 짧게 기다리고 덜 재시도한다(새로고침이 오래 멈추지 않게)."""
         body, _ = self._get("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
                             {"FID_COND_MRKT_DIV_CODE": market, "FID_INPUT_ISCD": code},
-                            **({"attempts": 2, "timeout": 5.0} if quick else {}))
+                            **({"attempts": 2, "timeout": 3.0} if quick else {}))
         return body.get("output") or {}
 
     def daily_chart(self, code: str, start: dt.date, end: dt.date, market: str = "J",

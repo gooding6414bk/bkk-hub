@@ -80,10 +80,11 @@ class Steps:
 
     def run(self, item: str, fn, recoverable: bool = True, min_count: int = 1, compare_prev: bool = True,
             deferrable: bool = False):
-        """fn() -> (count, message). 빈 결과(min_count 미만)는 실패, 전일 대비 70% 미만이면 경고.
+        """fn() -> (count, message[, "warn"]). 빈 결과(min_count 미만)는 실패, 전일 대비 70% 미만이면 경고.
         deferrable: 아직 안 올라오는 게 정상인 자료(KRX 그날 시세는 다음 영업일 아침)는 '대기'로 두고 아침에 다시 받는다."""
         try:
-            count, message = fn()
+            out = fn()
+            count, message = out[0], out[1]
             status = "ok"
             if count is not None and count < min_count:
                 if deferrable:
@@ -97,6 +98,8 @@ class Steps:
                 if prev and count < prev * 0.7:
                     status = "warn"
                     message = (message + " · " if message else "") + f"전일 {prev:,}건 대비 급감"
+            if status == "ok" and len(out) > 2 and out[2] == "warn":   # 일부 종목이 다시 받아도 실패
+                status = "warn"
         except NotConfigured as e:
             count, status, message = None, "skip", e.message
         except ApiError as e:

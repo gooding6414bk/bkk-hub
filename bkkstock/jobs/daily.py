@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import time
 import json
 
 import pandas as pd
@@ -120,6 +121,24 @@ def _universe_codes(ctx: Ctx, day: dt.date) -> list[str]:
     return sorted(stocks_only(df)["code"].astype(str).tolist())
 
 
+RETRY_MAX = 300        # 이보다 많이 실패했으면 다시 받지 않는다 (장애 중이면 시간만 든다)
+
+
+def _retry_failed(failed: list[str], fetch, results: dict) -> list[str]:
+    """실패한 종목만 잠깐 쉬었다가 한 번 더. 그래도 실패한 종목을 돌려준다."""
+    if not failed or len(failed) > RETRY_MAX:
+        return list(failed)
+    time.sleep(2)
+    still = []
+    for code in failed:
+        out = fetch(code)
+        if isinstance(out, ApiError):
+            still.append(code)
+        else:
+            results[code] = out
+    return still
+
+
 def collect_nxt_prices(ctx: Ctx, day: dt.date):
     """NXT 일봉. 월요일·첫 실행은 전 종목을 훑고, 나머지 날은 전날 NXT 목록만 본다."""
     codes = _universe_codes(ctx, day)
@@ -138,17 +157,28 @@ def collect_nxt_prices(ctx: Ctx, day: dt.date):
     if last_full is not None:
         base |= set(last_full["code"].astype(str))
     targets = codes if full else sorted(base & set(codes))
-    rows, errors, err_samples = [], 0, []
-    for code in targets:
+    rows, errors, err_samples, failed = [], 0, [], []
+
+    def fetch(code):
         try:
-            out = ctx.kis.daily_chart(code, day, day, market="NX")
+            return ctx.kis.daily_chart(code, day, day, market="NX")
         except ApiError as e:
-            errors += 1
             if len(err_samples) < 3:
                 err_samples.append(f"{code}:{e.code}")
+            return e
+
+    results = {}
+    for code in targets:
+        out = fetch(code)
+        if isinstance(out, ApiError):
+            errors += 1
+            failed.append(code)
             if errors > 50 and errors > len(targets) * 0.5:
-                raise
+                raise out
             continue
+        results[code] = out
+    still = _retry_failed(failed, fetch, results)      # NXT 시세는 놓치면 복구 불가 — 실패한 종목만 끝에 한 번 더
+    for code, out in results.items():
         for r in out:
             if r.get("stck_bsop_date") == day.strftime("%Y%m%d") and (to_int(r.get("acml_vol")) or 0) > 0:
                 rows.append({"date": r["stck_bsop_date"], "code": code, "open": r.get("stck_oprc"),
@@ -161,8 +191,10 @@ def collect_nxt_prices(ctx: Ctx, day: dt.date):
         ctx.store.write_clean("nxt_universe", day, df[["code"]].assign(scan="full" if full else "prev"))
     msg = f"NXT 거래 {len(df):,}종목 ({'전 종목' if full else '전날 목록'} {len(targets):,}개 조회)"
     if errors:
-        msg += f" · 오류 {errors}건 {', '.join(err_samples)}"
-    return len(df), msg
+        msg += f" · 오류 {errors}건 {', '.join(err_samples)} → 다시 받아 {errors - len(still)}건 회복"
+        if still:
+            msg += f", {len(still)}건 못 받음 ({', '.join(still[:5])})"
+    return len(df), msg, ("warn" if still else "ok")
 
 
 def collect_investor(ctx: Ctx, day: dt.date):
@@ -172,16 +204,28 @@ def collect_investor(ctx: Ctx, day: dt.date):
     have = set(ctx.store.clean_days("investor"))
     fill_days = {d.strftime("%Y%m%d") for d in trading_days_back(day, 20)[:-1] if d not in have}
     fill_rows: dict[str, list] = {}
-    for code in codes:
+    failed: list[str] = []
+
+    def fetch(code):
         try:
-            out = ctx.kis.investor_daily(code, day, market="UN")
+            return ctx.kis.investor_daily(code, day, market="UN")
         except ApiError as e:
-            errors += 1
             if len(err_samples) < 3:
                 err_samples.append(f"{code}:{e.code}")
+            return e
+
+    results = {}
+    for code in codes:
+        out = fetch(code)
+        if isinstance(out, ApiError):
+            errors += 1
+            failed.append(code)
             if errors > 50 and errors > len(codes) * 0.5:
-                raise
+                raise out
             continue
+        results[code] = out
+    still = _retry_failed(failed, fetch, results)
+    for code, out in results.items():
         for r in out:
             d = r.get("stck_bsop_date")
             if d == want:
@@ -199,8 +243,10 @@ def collect_investor(ctx: Ctx, day: dt.date):
             ctx.store.write_clean("investor", dd, pd.DataFrame(rr))
     msg = f"투자자별 매매(통합) {len(rows):,}종목 / {len(codes):,}"
     if errors:
-        msg += f" · 오류 {errors}건 {', '.join(err_samples)}"
-    return len(rows), msg
+        msg += f" · 오류 {errors}건 {', '.join(err_samples)} → 다시 받아 {errors - len(still)}건 회복"
+        if still:
+            msg += f", {len(still)}건 못 받음"
+    return len(rows), msg, ("warn" if still else "ok")
 
 
 def upsert_disclosures(ctx: Ctx, items: list[dict], day_hint: dt.date) -> list[dict]:

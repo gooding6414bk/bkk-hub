@@ -15,6 +15,7 @@
       {% if s.px %}<br><span class="muted small">{{ s.px.date }} 종가 {{ s.px.close | num }}{% if s.px.mktcap %} · 시총 {{ s.px.mktcap | eok }}{% endif %}</span>{% endif %}
       {% elif s.px %}<b class="num">{{ s.px.close | num }}</b> {{ m.chg(s.px.change_pct) }}
       {% if s.chg_won is not none %}<span class="muted small">어제보다 {{ m.won(s.chg_won) }}</span>{% endif %}
+      {% if not s.live_on %}<br><span class="muted small">현재가는 <a href="/apis">API</a>에 한국투자증권 키를 넣으면 보입니다.</span>{% endif %}
       {% if s.live_on %}<br><span class="t-warn small">현재가를 받지 못해 종가로 보입니다{% if s.live_error %} ({{ s.live_error }}){% endif %}. <a href="" class="pill">↻ 새로고침</a></span>{% endif %}
       <br><span class="muted small">{{ s.px.date }} 종가 · 거래대금 {{ s.px.value | eok }}{% if s.px.nxt_share %} (NXT {{ '%.0f' % s.px.nxt_share }}%){% endif %}{% if s.px.mktcap %} · 시총 {{ s.px.mktcap | eok }}{% endif %}</span>
       {% else %}<span class="muted">시세 이력이 아직 없습니다.</span>{% endif %}</p>

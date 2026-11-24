@@ -72,10 +72,8 @@ def classify_title(title: str, subject: str = "") -> dict:
         tone = "neg"
     elif strong_pos and strong_neg:
         tone = "mixed"
-    elif pos and not neg:
-        tone = "pos"
-    elif neg and not pos:
-        tone = "neg"
+    elif pos or neg:
+        tone = "price"                       # '상한가·급등·급락'만 — 재료가 아니라 결과. 호재·악재 비율에서 뺀다
     else:
         tone = "neutral"
     if tone == "neutral" and flipped:
@@ -128,9 +126,11 @@ def summarize(items: list[dict], subject: str = "") -> dict:
     uniq = dedupe(tagged)
     n = len(uniq)
     cnt = Counter(it["tone"] for it in uniq)
-    cats_pos = Counter(c for it in uniq for c in it["categories"] if _dir(c) == "pos")
-    cats_neg = Counter(c for it in uniq for c in it["categories"] if _dir(c) == "neg")
-    ratio = {k: (cnt.get(k, 0) / n * 100 if n else 0) for k in ("pos", "neg", "mixed", "neutral")}
+    n_price = cnt.get("price", 0)
+    n_rated = n - n_price                    # 주가 움직임만 다룬 기사는 비율의 분모에서도 뺀다
+    cats_pos = Counter(c for it in uniq if it["tone"] != "price" for c in it["categories"] if _dir(c) == "pos")
+    cats_neg = Counter(c for it in uniq if it["tone"] != "price" for c in it["categories"] if _dir(c) == "neg")
+    ratio = {k: (cnt.get(k, 0) / n_rated * 100 if n_rated else 0) for k in ("pos", "neg", "mixed", "neutral")}
     by_cat: dict[str, list[dict]] = {}
     for it in uniq:
         for c in it["categories"]:
@@ -139,6 +139,8 @@ def summarize(items: list[dict], subject: str = "") -> dict:
     if n:
         lines.append(f"최근 {n}건(같은 소식 묶음) 중 호재 {cnt.get('pos', 0)}건({ratio['pos']:.0f}%), "
                      f"악재 {cnt.get('neg', 0)}건({ratio['neg']:.0f}%), 섞임 {cnt.get('mixed', 0)}건, 중립 {cnt.get('neutral', 0)}건.")
+        if n_price:
+            lines.append(f"주가 움직임(상한가·급등·급락 등)만 다룬 {n_price}건은 재료가 아니라 결과라서 비율에서 뺐습니다.")
         if cats_pos:
             lines.append("호재는 주로 " + ", ".join(f"{c}({k})" for c, k in cats_pos.most_common(3)) + ".")
         if cats_neg:

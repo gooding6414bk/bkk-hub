@@ -4,6 +4,7 @@
 <section class="card">
   <div class="card-head"><h2>보유·관심 종목</h2><span class="muted small">기준일 {{ day or '–' }}</span></div>
   {% if rows %}
+  {{ m.live_note(live) }}
   <div class="tbl-wrap"><table class="tbl cards compact-cards">
     <thead><tr><th>종목</th><th class="r">{{ '현재가' if live.live_at else '종가' }}</th><th class="r">어제보다</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험</th><th>최근 공시</th><th></th></tr></thead>
     <tbody>
@@ -22,7 +23,6 @@
     {% endfor %}
     </tbody>
   </table></div>
-  {{ m.live_note(live) }}
   {% else %}<p class="empty">아래 '종목 추가'에서 보유·관심 종목을 넣으세요.</p>{% endif %}
 </section>
 

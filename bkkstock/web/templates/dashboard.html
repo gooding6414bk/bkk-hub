@@ -32,6 +32,7 @@
 
 <section class="card">
   <div class="card-head"><h2>📈 내 종목</h2><a href="/stocks" class="pill">관리</a></div>
+  {% if d.watch %}{{ m.live_note(d.live) }}{% endif %}
   {% if d.totals %}{% set t = d.totals %}
   <div class="kv2">
     <div><span>보유 평가금액</span><b class="num">{{ t.value | num }}원</b></div>
@@ -40,7 +41,7 @@
   </div>
   {% endif %}
   {% if d.watch %}
-  <div class="tbl-wrap"><table class="tbl cards compact-cards">
+  <div class="tbl-wrap"><table class="tbl cards compact-cards dash-watch">
     <thead><tr><th>종목</th><th class="r">{{ '현재가' if d.live.live_at else '종가' }}</th><th class="r">어제보다</th><th class="r">평가손익</th><th>참고 점수</th><th>위험</th></tr></thead>
     <tbody>
     {% for w in d.watch %}
@@ -55,7 +56,6 @@
     {% endfor %}
     </tbody>
   </table></div>
-  {{ m.live_note(d.live) }}
   <p class="muted small">참고 점수는 1개월 남짓 시장 대비 기울기이고 아직 검증 전입니다 — 내일 오를 확률이 아닙니다. <a href="/stocks#legend">읽는 법</a></p>
   {% else %}
   <p class="empty">아직 등록한 종목이 없습니다. <a href="/stocks">주식 관리</a>에서 보유·관심 종목을 추가하세요.</p>

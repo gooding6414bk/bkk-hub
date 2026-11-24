@@ -75,4 +75,5 @@ def run(ctx: Ctx, day: dt.date) -> dict:
     status = "ok" if out.get("remote", "").startswith(("ok", "BACKUP_CMD")) else "partial"
     rid = ctx.store.start_run("backup", day)
     ctx.store.finish_run(rid, status, out)
+    out["status"] = status
     return out

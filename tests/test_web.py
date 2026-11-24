@@ -278,3 +278,68 @@ def test_knowledge_page(client):
     for word in ("IRP", "ISA", "퇴직연금", "노령연금", "증권거래세", "세액공제", "확인 필요", "국민연금공단", "건강보험"):
         assert word in page, word
     assert 'href="/knowledge"' in c.get("/").get_data(as_text=True)
+
+
+def test_live_price_temporary_error_does_not_switch_market(client, monkeypatch):
+    import httpx
+    calls = []
+    state = {"n": 0}
+    base = _kis_handler(calls)
+
+    def handler(req):
+        if req.url.path != "/oauth2/tokenP":
+            state["n"] += 1
+            if state["n"] == 1:
+                return httpx.Response(500, text="server error")        # 잠깐 난 서버 오류
+        return base(req)
+    c, cx, datamod = _live_setup(client, monkeypatch, handler)
+    c.get("/stocks/000001")
+    assert datamod._live_state["market"] == "UN"                         # KRX 로 바꾸지 않는다
+    datamod._live_state.update(error=None, error_t=0.0)
+    datamod._live_cache.clear()
+    assert "KRX+넥스트레이드" in c.get("/stocks/000001").get_data(as_text=True)
+
+
+def test_live_price_switches_back_to_integrated_after_10_minutes(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls, reject_un=True))
+    c.get("/stocks/000001")
+    assert datamod._live_state["market"] == "J"
+    datamod._live_cache.clear()
+    datamod._live_state["j_since"] -= datamod.LIVE_RETRY_UN + 1
+    c.get("/stocks/000002")
+    assert ("000002", "UN") in calls                                     # 10분 뒤 통합 시세를 다시 시도
+
+
+def test_live_price_concurrent_request_does_not_wait(client, monkeypatch):
+    calls = []
+    c, cx, datamod = _live_setup(client, monkeypatch, _kis_handler(calls))
+    datamod._live_lock.acquire()                                         # 다른 요청이 조회 중이라고 가정
+    try:
+        r = datamod.live_quotes(cx, ["000001", "000002"])
+    finally:
+        datamod._live_lock.release()
+    assert calls == [] and r["quotes"] == {} and r["error"] is None      # 기다리지 않고 종가로
+
+
+def test_kis_token_issued_once_under_concurrency(settings, store):
+    import threading
+    import time as _t
+    import httpx
+    from bkkstock.clients.base import RateLimiter
+    from bkkstock.clients.kis import KisClient
+    n = {"token": 0}
+
+    def handler(req):
+        if req.url.path == "/oauth2/tokenP":
+            n["token"] += 1
+            _t.sleep(0.2)
+            return httpx.Response(200, json={"access_token": f"T{n['token']}", "access_token_token_expired": "2099-01-01 00:00:00"})
+        return httpx.Response(200, json={"rt_cd": "0", "output": {"stck_prpr": "1"}})
+    settings.values.update(KIS_APP_KEY="APPKEY123456", KIS_APP_SECRET="SECRET")
+    clients = [KisClient(settings, store, http=httpx.Client(transport=httpx.MockTransport(handler)), limiter=RateLimiter(1000))
+               for _ in range(5)]
+    ts = [threading.Thread(target=k.token) for k in clients]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert n["token"] == 1

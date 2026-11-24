@@ -17,6 +17,7 @@ PY="$DIR/.venv/bin/python"
 DATA="${BKK_STOCK_DATA:-$DIR/data}"
 BAD="$DATA/update.bad"
 NOTIFIED="$DATA/update.notified"
+STATE="$DATA/update.state"     # 보드 운영 화면·healthz(deploy_stale)가 읽는다: 마지막 fetch 성공, 밀린 시작 시각, 결과
 export ARBI_INSTANCE="$DIR/instance" GIBALHAE_CONTENT="$DIR/instance/gibalhae/content"
 mkdir -p "$DATA/locks"
 touch "$BAD" "$NOTIFIED"
@@ -26,6 +27,14 @@ notify_once() {   # 같은 커밋·같은 이유로는 한 번만 알린다
   grep -qxF "$key" "$NOTIFIED" 2>/dev/null && return 0
   echo "$key" >> "$NOTIFIED"
   "$PY" -m bkkstock notify "$msg" >/dev/null 2>&1 || true
+}
+
+st_get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
+st_put() {   # $1=결과. FETCH_OK·BEHIND 가 비어 있으면 전 값을 그대로 둔다
+  local now; now="$(date +%s)"
+  printf 'fetch_ok=%s\nbehind_since=%s\nresult=%s\nhead=%s\nat=%s\n' \
+    "${FETCH_OK:-$(st_get fetch_ok)}" "${BEHIND:-$(st_get behind_since)}" "$1" \
+    "$(git rev-parse --short HEAD 2>/dev/null)" "$now" > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
 }
 
 DRAFT_BRANCH="${GIBALHAE_DRAFT_BRANCH:-gibalhae-daily}"
@@ -42,21 +51,25 @@ sync_drafts() {
 
 if ! git fetch -q origin "$BRANCH" 2>/dev/null; then
   echo "git fetch 실패 (네트워크 또는 저장소 권한)"
+  st_put fetch_fail      # 하루 넘게 이어지면 healthz 에 deploy_stale
   exit 0
 fi
+FETCH_OK="$(date +%s)"
 OLD="$(git rev-parse HEAD)"
 NEW="$(git rev-parse "origin/$BRANCH")"
-[ "$OLD" = "$NEW" ] && { sync_drafts; exit 0; }
-if grep -qxF "$NEW" "$BAD"; then echo "${NEW:0:7}은 전에 실패한 커밋이라 건너뜀"; exit 0; fi
+if [ "$OLD" = "$NEW" ]; then BEHIND=0; st_put current; sync_drafts; exit 0; fi
+prev_behind="$(st_get behind_since)"
+if [ -n "$prev_behind" ] && [ "$prev_behind" != 0 ]; then BEHIND="$prev_behind"; else BEHIND="$(date +%s)"; fi
+if grep -qxF "$NEW" "$BAD"; then echo "${NEW:0:7}은 전에 실패한 커밋이라 건너뜀"; st_put bad_commit; exit 0; fi
 
 # 바쁘면 다음에: 작업 잠금(daily·backfill·morning), 기발해 제작, 부하
 for j in daily backfill; do
-  if ! flock -n "$DATA/locks/$j.lock" true 2>/dev/null; then echo "$j 실행 중이라 다음에 업데이트"; exit 0; fi
+  if ! flock -n "$DATA/locks/$j.lock" true 2>/dev/null; then echo "$j 실행 중이라 다음에 업데이트"; st_put busy; exit 0; fi
 done
-if systemctl is-active --quiet "bkk-stock@morning.service" 2>/dev/null; then echo "아침 작업 중이라 다음에"; exit 0; fi
-if pgrep -f "gibalhae/pipeline/daily.py" >/dev/null 2>&1; then echo "기발해 작업 중이라 다음에 업데이트"; exit 0; fi
+if systemctl is-active --quiet "bkk-stock@morning.service" 2>/dev/null; then echo "아침 작업 중이라 다음에"; st_put busy; exit 0; fi
+if pgrep -f "gibalhae/pipeline/daily.py" >/dev/null 2>&1; then echo "기발해 작업 중이라 다음에 업데이트"; st_put busy; exit 0; fi
 load="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo 0)"
-if awk -v l="$load" 'BEGIN{exit !(l > 2.0)}'; then echo "서버가 바빠서(부하 $load) 다음에"; exit 0; fi
+if awk -v l="$load" 'BEGIN{exit !(l > 2.0)}'; then echo "서버가 바빠서(부하 $load) 다음에"; st_put busy; exit 0; fi
 
 # 사람이 해야 하는 변경은 자동으로 받지 않는다 (sudo·pip 를 자동으로 돌리지 않음)
 need=""
@@ -65,6 +78,7 @@ git diff --quiet "$OLD" "$NEW" -- deploy/systemd deploy/units.sh || need="$need 
 if [ -n "$need" ]; then
   echo "사람이 반영해야 하는 변경:$need"
   notify_once "manual:$NEW" "🛠 bkk-hub ${NEW:0:7}에 직접 반영할 변경이 있습니다:$need. 서버에서: cd ~/bkk-hub && git merge --ff-only origin/$BRANCH && bash deploy/manual-update.sh"
+  st_put manual        # 텔레그램이 없어도 운영 화면·healthz 로 보인다
   exit 0
 fi
 
@@ -73,25 +87,29 @@ WT="$(mktemp -d)"
 cleanup() { git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; git worktree prune >/dev/null 2>&1; }
 trap cleanup EXIT
 git worktree add -q --detach "$WT/src" "$NEW" >/dev/null 2>&1 || { echo "worktree 만들기 실패"; exit 0; }
-ok_test=1
 TEST=(-m pytest -q -x -p no:cacheprovider tests --deselect "tests/test_gibalhae.py::test_gibalhae_script[gibalhae_pipeline_check.py]")
 if ! "$PY" -c "import pytest" >/dev/null 2>&1; then
   # pytest 가 없으면 최소한 모든 작업 모듈과 웹이 import 되는지만 본다
   TEST=(-c "import bkkstock.jobs.daily, bkkstock.jobs.morning, bkkstock.jobs.report, bkkstock.jobs.watchdog, bkkstock.jobs.backfill, bkkstock.web.app")
 fi
-if ! (cd "$WT/src" && env -i PATH=/usr/bin:/bin HOME="$WT" LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
-      nice -n 19 ionice -c3 timeout 300 "$PY" "${TEST[@]}" >"$WT/test.log" 2>&1); then
-  ok_test=0
+(cd "$WT/src" && env -i PATH=/usr/bin:/bin HOME="$WT" LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+      nice -n 19 ionice -c3 timeout 300 "$PY" "${TEST[@]}" >"$WT/test.log" 2>&1)
+rc=$?
+if [ "$rc" = 124 ]; then
+  # 시간 초과는 커밋 탓이 아닐 수 있다(CPU 크레딧 바닥 등) — 실패로 기억하지 않고 다음에 다시
+  echo "${NEW:0:7} 시험 시간 초과 — 다음에 다시"; st_put test_timeout; exit 0
 fi
-if [ "$ok_test" != 1 ]; then
+if [ "$rc" != 0 ]; then
   echo "${NEW:0:7} 시험 실패 — 받지 않음"; tail -n 20 "$WT/test.log"
   echo "$NEW" >> "$BAD"
+  st_put test_fail
   notify_once "test:$NEW" "⚠️ bkk-hub ${NEW:0:7} 시험(pytest) 실패로 배포하지 않았습니다. 지금 버전(${OLD:0:7})으로 계속 돕니다."
   exit 1
 fi
 
 if ! git merge --ff-only -q "origin/$BRANCH"; then
   notify_once "ff:$NEW" "⚠️ bkk-hub 업데이트 실패: 서버에 고친 파일이 있어 받을 수 없습니다 (git status 확인)"
+  st_put local_changes
   exit 1
 fi
 sync_drafts
@@ -105,6 +123,7 @@ done
 
 if [ "$ok" = 1 ]; then
   echo "업데이트 완료 ${OLD:0:7} → ${NEW:0:7}"
+  BEHIND=0; st_put updated
   exit 0
 fi
 
@@ -112,5 +131,6 @@ echo "대시보드가 안 떠서 되돌립니다"
 git reset -q --hard "$OLD"
 sudo systemctl restart bkk-hub-web.service
 echo "$NEW" >> "$BAD"
+st_put rollback
 notify_once "rollback:$NEW" "🚨 bkk-hub 업데이트 ${NEW:0:7} 후 대시보드가 안 떠서 ${OLD:0:7}로 되돌렸습니다 (이 커밋은 다시 받지 않음)"
 exit 1

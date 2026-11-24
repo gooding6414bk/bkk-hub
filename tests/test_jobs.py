@@ -117,3 +117,62 @@ def test_krx_empty_in_evening_is_pending_not_failure(ctx, monkeypatch):
     calls = stub_all(monkeypatch)
     daily.catch_up(ctx, DAY)                              # 아침에 대기 항목을 다시 받는다
     assert {n for n, _ in calls} == {"krx_prices", "krx_index", "outlook"}
+
+
+# ---------------- 2026-11 2차 점검 ----------------
+def test_backup_due_ignores_weekend():
+    from bkkstock.jobs.watchdog import backup_due
+    from bkkstock.timeutil import KST
+    fri = dt.datetime(2026, 11, 20, 21, 0, tzinfo=KST)
+    for now in (dt.datetime(2026, 11, 22, 9, 1, tzinfo=KST), dt.datetime(2026, 11, 23, 20, 59, tzinfo=KST)):
+        assert backup_due(now) == fri                         # 일요일 아침·월요일 밤에도 금요일 백업이면 충분
+    assert backup_due(dt.datetime(2026, 11, 24, 9, 1, tzinfo=KST)) == dt.datetime(2026, 11, 23, 21, 0, tzinfo=KST)
+
+
+def test_health_backup_stale_only_when_weekday_backup_missing(ctx, monkeypatch):
+    from bkkstock.jobs import watchdog
+    from bkkstock.timeutil import KST
+    rid = ctx.store.start_run("backup", dt.date(2026, 11, 20))
+    ctx.store.finish_run(rid, "ok", {})
+    with ctx.store.db() as con:
+        con.execute("UPDATE job_runs SET finished_at=? WHERE id=?", ("2026-11-20T21:01:00+09:00", rid))
+    monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 22, 10, 0, tzinfo=KST))   # 일요일
+    assert "backup_stale" not in watchdog.health(ctx)[1]["codes"]
+    monkeypatch.setattr(watchdog, "now_kst", lambda: dt.datetime(2026, 11, 24, 10, 0, tzinfo=KST))   # 월요일 백업 없음
+    assert "backup_stale" in watchdog.health(ctx)[1]["codes"]
+
+
+def test_deploy_stale_from_update_state(ctx, monkeypatch):
+    import time as _t
+    from bkkstock.jobs import watchdog
+    now = _t.time()
+    assert watchdog.deploy_stale({}, now) is False                                  # 설치 전·시험 환경
+    assert not watchdog.deploy_stale({"fetch_ok": str(now - 600), "behind_since": "0"}, now)
+    assert watchdog.deploy_stale({"fetch_ok": str(now - 90000), "behind_since": "0"}, now)       # 하루 넘게 fetch 실패
+    assert watchdog.deploy_stale({"fetch_ok": str(now - 60), "behind_since": str(now - 90000)}, now)   # 하루 넘게 밀림
+    (ctx.store.data_dir / "update.state").write_text(f"fetch_ok={now - 90000:.0f}\nbehind_since=0\nresult=fetch_fail\n")
+    assert "deploy_stale" in watchdog.health(ctx)[1]["codes"]
+
+
+def test_nxt_failed_codes_are_retried_and_leftovers_warn(ctx, monkeypatch):
+    from bkkstock.jobs.common import Steps
+    monkeypatch.setattr(daily.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daily, "_universe_codes", lambda c, d: ["000001", "000002", "000003"])
+    tries = {}
+
+    def chart(code, start, end, market="J"):
+        tries[code] = tries.get(code, 0) + 1
+        if code == "000003" or (code == "000002" and tries[code] == 1):
+            raise ApiError("kis", "500", "일시 오류")
+        return [{"stck_bsop_date": DAY.strftime("%Y%m%d"), "acml_vol": "10", "stck_clpr": "100"}]
+    monkeypatch.setattr(ctx.kis, "daily_chart", chart)
+    rid = ctx.store.start_run("daily", DAY)
+    res = Steps(ctx.store, rid).run("nxt_prices", lambda: daily.collect_nxt_prices(ctx, DAY))
+    assert res.count == 2 and res.status == "warn"               # 000002 는 다시 받아 회복, 000003 만 남음
+    assert tries == {"000001": 1, "000002": 2, "000003": 2} and "1건 못 받음" in res.message
+
+
+def test_redact_json_token():
+    from bkkstock.redact import redact
+    out = redact('{"access_token":"eyJhbGciOiJ.abc.def","expires_in":86400}')
+    assert "eyJ" not in out and '"access_token":"•••"' in out

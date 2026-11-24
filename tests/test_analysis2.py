@@ -55,7 +55,8 @@ def test_breakdown_periods_streak_and_ratios():
     ("가나다 수주 소식에 급등했지만 소송 리스크", "mixed", "법적·규제"),
     ("가나다 신제품 공개 행사 열어", "pos", "승인·신사업"),
     ("가나다 주주총회 개최", "neutral", None),
-    ("가나다 급락", "neg", "주가 약세"),
+    ("가나다 급락", "price", "주가 약세"),
+    ("가나다 상한가 직행…52주 신고가", "price", "주가 강세"),
 ])
 def test_classify_title(title, tone, cat):
     r = newsread.classify_title(title)
@@ -79,6 +80,13 @@ def test_summary_has_ratio_and_sentence():
     assert round(sum(sm["ratio"].values())) == 100
     assert "호재 3건(60%)" in sm["summary"] and "가격에 반영" in sm["summary"]
     assert sm["groups"][0]["count"] >= 1
+
+
+def test_price_only_news_is_left_out_of_ratio():
+    items = [{"title": t} for t in ("A 상한가", "B 급등 신고가", "C 공급계약 체결", "D 유상증자 결정")]
+    sm = newsread.summarize(items)
+    assert sm["counts"]["price"] == 2 and sm["ratio"]["pos"] == 50 and sm["ratio"]["neg"] == 50
+    assert "비율에서 뺐습니다" in sm["summary"] and "주가 강세" not in sm["summary"]
 
 
 def test_disclosure_summary():

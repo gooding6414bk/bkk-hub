@@ -313,8 +313,8 @@ class Store:
         with self.db() as con:
             row = con.execute("SELECT calls_day, calls_today FROM api_status WHERE api=?", (api,)).fetchone()
             calls = (row["calls_today"] + 1) if row and row["calls_day"] == today else 1
-            if row is None:
-                con.execute("INSERT INTO api_status(api, calls_day, calls_today) VALUES (?,?,0)", (api, today))
+            if row is None:          # 두 요청이 처음 동시에 기록해도 충돌하지 않게
+                con.execute("INSERT OR IGNORE INTO api_status(api, calls_day, calls_today) VALUES (?,?,0)", (api, today))
             if ok:
                 con.execute("UPDATE api_status SET last_ok_at=?, calls_day=?, calls_today=? WHERE api=?",
                             (now, today, calls, api))

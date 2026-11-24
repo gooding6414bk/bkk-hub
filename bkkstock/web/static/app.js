@@ -95,7 +95,7 @@
   }));
 
   // ---------- 뉴스 ----------
-  const TONE = { pos: ["호재", "pos"], neg: ["악재", "neg"], mixed: ["섞임", "mixed"], neutral: ["중립", "info"] };
+  const TONE = { pos: ["호재", "pos"], neg: ["악재", "neg"], mixed: ["섞임", "mixed"], neutral: ["중립", "info"], price: ["주가", "info"] };
   async function loadNews(force) {
     const el = $("#news");
     if (!el) return;
@@ -105,10 +105,7 @@
       if (r.error) { el.innerHTML = `<p class="err small">${esc(r.error)}</p>`; return; }
       if (!r.items.length) { el.innerHTML = '<p class="empty">뉴스가 없습니다.</p>'; return; }
       const sm = r.summary || {};
-      const bar = (r.bar || []).map((b) => `<span class="${b.key}" style="width:${b.pct}%" title="${esc(b.label)} ${b.pct.toFixed(0)}%"></span>`).join("");
-      const legend = (r.bar || []).map((b) => `<span>${esc(b.label)} ${b.pct.toFixed(0)}%</span>`).join("");
-      const groups = (sm.groups || []).map((g) =>
-        `<li><span class="chip ${g.dir === "pos" ? "pos" : "neg"}">${esc(g.category)} ${g.count}</span> <span class="muted small">${g.examples.map(esc).join(" · ")}</span></li>`).join("");
+      // 비율 막대·주제 목록은 뺐다(2026-11 2차 점검: 기사 제목이 두 번 나오고, 매수 금지 종목에 '호재 %' 막대가 사는 이유처럼 읽힘)
       const items = r.items.map((n) => {
         const t = TONE[n.tone] || TONE.neutral;
         const why = (n.words || []).length ? `<span class="why">근거: ${n.words.map(esc).join(", ")}</span>` : "";
@@ -118,8 +115,6 @@
       }).join("");
       const src = r.source === "naver" ? "네이버 검색 API" : r.source === "demo" ? "샘플" : "구글 뉴스 RSS";
       el.innerHTML = `<p class="small"><b>요약</b> ${esc(sm.summary || "")}</p>
-        <div class="ratio">${bar}</div><div class="ratio-legend">${legend}</div>
-        ${groups ? `<ul class="list compact" style="margin-top:8px">${groups}</ul>` : ""}
         <h3>기사 ${sm.n || r.items.length}건 <span class="muted small">(원래 ${sm.raw_n || r.items.length}건, 같은 소식 묶음)</span></h3>
         ${items}<p class="muted small">출처: ${src} · ${esc((r.fetched_at || "").slice(11, 16))} 받음</p>`;
     } catch (err) { el.innerHTML = `<p class="err small">${esc(err.message)}</p>`; }

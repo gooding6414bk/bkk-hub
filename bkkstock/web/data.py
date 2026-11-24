@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import os
 import shutil
+import threading
 import time
 from functools import lru_cache
 
@@ -94,8 +95,16 @@ def _flags(row: dict | None) -> list[dict]:
 LIVE_TTL = 20            # 초. 20초 안에 다시 열면 받아 둔 값을 쓴다 (호출 수 제한)
 LIVE_MAX = 40            # 한 번에 조회할 최대 종목 수
 LIVE_BUDGET = 8.0        # 초. 이보다 오래 걸리면 나머지는 종가로 보인다
+LIVE_RETRY_UN = 600     # 초. KRX로 바꾼 뒤 10분 지나면 통합 시세를 다시 시도
 _live_cache: dict = {}   # code -> (받은 시각 time.time(), 값)
-_live_state: dict = {"market": "UN", "error": None, "error_t": 0.0}
+_live_state: dict = {"market": "UN", "j_since": 0.0, "error": None, "error_t": 0.0}
+_live_lock = threading.Lock()   # 한 번에 한 요청만 조회 — 새로고침 연타·여러 탭이 같은 종목을 겹쳐 묻지 않게
+
+
+def _transient(e: ApiError) -> bool:
+    """잠깐 생긴 오류(연결·호출 제한·토큰·서버 5xx·게이트웨이 EGW…)인가. 이때는 KRX로 바꾸지 않는다."""
+    c = str(e.code)
+    return c in ("network", "rate_limit", "not_configured", "token_wait") or c.isdigit() or c.startswith("EGW")
 
 
 def _quote(out: dict, at: dt.datetime, market: str = "UN") -> dict | None:
@@ -110,33 +119,53 @@ def _quote(out: dict, at: dt.datetime, market: str = "UN") -> dict | None:
 
 def live_quotes(ctx: Ctx, codes: list[str]) -> dict:
     """{'quotes': {code: 값}, 'error': 문구 또는 None, 'on': 키가 있는지}.
-    통합(KRX+넥스트레이드) 현재가를 먼저 묻고, 안 되면 KRX 현재가로."""
+    통합(KRX+넥스트레이드) 현재가를 먼저 묻고, 통합 시세를 안 준다는 응답일 때만 KRX 현재가로."""
     if ctx.settings.demo or not (ctx.settings.get("KIS_APP_KEY") and ctx.settings.get("KIS_APP_SECRET")):
         return {"quotes": {}, "error": None, "on": False}
+    codes = list(dict.fromkeys(codes))[:LIVE_MAX]
     now = time.time()
-    quotes, error = {}, None
+    quotes = {c: _live_cache[c][1] for c in codes if c in _live_cache and now - _live_cache[c][0] < LIVE_TTL}
+    if len(quotes) == len(codes):
+        return {"quotes": quotes, "error": _live_state["error"] if now - _live_state["error_t"] < 30 else None, "on": True}
+    if not _live_lock.acquire(blocking=False):
+        # 다른 요청이 조회 중 — 기다리지 않고 받아 둔 값(조금 지났어도)·종가로 바로 보인다
+        for c in codes:
+            if c not in quotes and c in _live_cache:
+                quotes[c] = _live_cache[c][1]
+        return {"quotes": quotes, "error": None, "on": True}
+    try:
+        return _fetch_live(ctx, codes, quotes, now)
+    finally:
+        _live_lock.release()
+
+
+def _fetch_live(ctx: Ctx, codes: list[str], quotes: dict, now: float) -> dict:
+    error = None
     # 방금 실패했으면(연결 안 됨 등) 30초 동안은 다시 묻지 않는다 — 화면이 매번 멈추지 않게
     if _live_state["error"] and now - _live_state["error_t"] < 30:
         error = _live_state["error"]
+    if _live_state["market"] == "J" and now - _live_state["j_since"] > LIVE_RETRY_UN:
+        _live_state["market"] = "UN"
     started = time.monotonic()
-    for code in list(dict.fromkeys(codes))[:LIVE_MAX]:
-        hit = _live_cache.get(code)
-        if hit and now - hit[0] < LIVE_TTL:
-            quotes[code] = hit[1]
+    for code in codes:
+        if code in quotes:
             continue
+        hit = _live_cache.get(code)
         if error or time.monotonic() - started > LIVE_BUDGET:
             if hit:
                 quotes[code] = hit[1]     # 조금 지난 값이라도 받은 시각과 함께 보인다
             continue
+        market = _live_state["market"]
         try:
             try:
-                out = ctx.kis.inquire_price(code, _live_state["market"], quick=True)
+                out = ctx.kis.inquire_price(code, market, quick=True)
             except ApiError as e:
-                if _live_state["market"] != "UN" or e.code in ("network", "rate_limit", "not_configured", "token_wait"):
+                if market != "UN" or _transient(e):
                     raise
-                _live_state["market"] = "J"          # 통합 시세를 안 주면 KRX 현재가로
+                market = "J"                         # 통합 시세를 안 준다는 응답 → KRX 현재가로 (10분 뒤 다시 통합)
+                _live_state.update(market="J", j_since=time.time())
                 out = ctx.kis.inquire_price(code, "J", quick=True)
-            q = _quote(out, now_kst(), _live_state["market"])
+            q = _quote(out, now_kst(), market)
         except ApiError as e:
             error = str(e)
             _live_state.update(error=error, error_t=time.time())
@@ -678,7 +707,35 @@ def ops(ctx: Ctx) -> dict:
             "backups": backups[-10:], "other": other, "login": ctx.store.login_fail_summary(time.time() - 86400), "verify": _verify_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)),
             "avoid": _avoid_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)), "first_week": first_week,
             "fc_live": fcmod.live_record(ctx.store), "fc_model": fcmod.MODEL_VERSION,
-            "remote_backup": bool(ctx.settings.get("BACKUP_CMD"))}
+            "remote_backup": bool(ctx.settings.get("BACKUP_CMD")), "deploy": deploy_info(ctx)}
+
+
+DEPLOY_RESULTS = {"current": "최신", "updated": "방금 업데이트", "busy": "작업 중이라 미룸", "bad_commit": "전에 실패한 커밋이라 건너뜀",
+                  "manual": "서버에서 직접 반영할 변경 있음 (deploy/manual-update.sh)", "test_fail": "시험 실패로 받지 않음",
+                  "test_timeout": "시험 시간 초과 — 다음에 다시", "local_changes": "서버에 고친 파일이 있어 못 받음",
+                  "rollback": "보드가 안 떠서 되돌림", "fetch_fail": "저장소에 연결 못 함"}
+
+
+def deploy_info(ctx: Ctx) -> dict:
+    """운영 화면용: 지금 돌고 있는 커밋과 자동 업데이트 상태. (공개 healthz 에는 커밋을 넣지 않는다)"""
+    import subprocess
+    from ..jobs.watchdog import deploy_stale, deploy_state
+    from .. import __file__ as pkg_file
+    head = ""
+    try:
+        r = subprocess.run(["git", "log", "-1", "--format=%h %cd %s", "--date=format:%m/%d %H:%M"],
+                           cwd=os.path.dirname(os.path.dirname(pkg_file)), capture_output=True, text=True, timeout=5)
+        head = r.stdout.strip()[:120] if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        pass
+    st = deploy_state(ctx.store.data_dir)
+    at = ""
+    try:
+        at = dt.datetime.fromtimestamp(float(st.get("at") or 0), now_kst().tzinfo).strftime("%m/%d %H:%M") if st.get("at") else ""
+    except ValueError:
+        pass
+    return {"head": head, "result": DEPLOY_RESULTS.get(st.get("result", ""), st.get("result", "")), "at": at,
+            "stale": deploy_stale(st, time.time()), "installed": bool(st)}
 
 
 _size_cache = {"t": 0, "v": 0}

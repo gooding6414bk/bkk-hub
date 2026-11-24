@@ -238,9 +238,10 @@ details form label { display: flex; flex-direction: column; gap: 4px; }
 
 /* 좁은 화면: 표를 카드로 */
 @media (max-width: 700px) {
-  .top { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
-  .top .brand { flex: 1; }
-  .top nav { order: 3; flex-basis: 100%; }
+  /* 휴대폰: 머리는 메뉴 한 줄만 (로고는 '홈'과 겹치고, 로그아웃은 운영 화면에) */
+  .top { gap: 8px; padding: 6px 8px; }
+  .top .brand, .top .logout { display: none; }
+  .top nav { flex-basis: 100%; justify-content: space-between; }
   main { padding: 12px; gap: 12px; }
   .card { padding: 14px; }
   .tbl.cards thead { display: none; }
@@ -355,9 +356,11 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 .toolbar > summary { cursor: pointer; }
 /* 휴대폰: 차트 글씨를 키우고(그림을 0.44배로 줄여 그려서 축 글자가 5px이 되던 문제), 표는 핵심 칸만 */
 @media (max-width: 600px) {
-  .chart-wrap svg text { font-size: 24px; }
+  svg.chart text, svg.chart .c-axis { font-size: 26px; }   /* .chart .c-axis(11px)보다 강하게 — 모든 차트에 */
   .flow-tbl .p1, .flow-tbl .p60, .flow-tbl .pv { display: none; }
   .flow-tbl { min-width: 0 !important; }
   .compact-cards td[data-label="참고 점수"] .grade { font-size: .78rem; padding: 2px 8px; }
-  nav a { padding: 10px 8px; }
+  .top nav a { padding: 11px 9px; }      /* 터치 44px 가까이 */
+  .dash-watch td[data-label="참고 점수"] { display: none; }   /* 검증 전 점수는 메인 휴대폰 화면에서 뺀다 (종목·관리 화면에는 있음) */
+  .live-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 8px; }
 }

@@ -6,7 +6,11 @@
   <button data-job="backfill" data-confirm="과거 90거래일 시세·130일 공시를 채웁니다. 오래 걸립니다. 시작할까요?">과거 데이터 채우기</button>
   <button data-job="dart-poll" class="ghost">공시 조회</button>
   <button data-job="report" class="ghost" data-confirm="일일 보고를 지금 보낼까요?">보고 보내기</button>
+  <form method="post" action="/logout" class="logout ops-logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost">로그아웃</button></form>
 </div>
+{% set dp = o.deploy %}
+<p class="small {{ 't-warn' if dp.stale }}">지금 버전 <code>{{ dp.head or '알 수 없음' }}</code>
+  {% if dp.installed %} · 자동 업데이트 {{ dp.at }} {{ dp.result }}{% if dp.stale %} — 하루 넘게 새 커밋을 못 받음 (서버에서 <code>journalctl -u bkk-hub-update -n 30</code>){% endif %}{% else %} · 자동 업데이트 기록 없음{% endif %}</p>
 {% if o.login %}<p class="muted small">로그인 실패 최근 24시간 {{ o.login.n }}회{% if o.login.n %} · 주소 {{ o.login.ips }}곳 · 마지막 {{ o.login.last_ip }}{% endif %} — 잠겼으면 서버에서 <code>python -m bkkstock unlock</code></p>{% endif %}
 
 <div class="grid3">
