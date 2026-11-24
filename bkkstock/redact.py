@@ -11,6 +11,7 @@ import re
 
 _PARAM = re.compile(r"(?i)\b(crtfc_key|servicekey|auth_key|appkey|appsecret|secretkey|access_token|token|key)=([^&\s'\"]+)")
 _JSON = re.compile(r'(?i)("(?:access_token|appsecret|appkey|approval_key)"\s*:\s*")([^"]+)(")')
+_ECOS = re.compile(r"(ecos\.bok\.or\.kr/api/\w+/)([^/\s]+)")      # ECOS 는 키를 주소 경로에 싣는다
 _BOT = re.compile(r"/bot\d+:[A-Za-z0-9_-]+")
 _HEADER = re.compile(r"(?i)\b(authorization|appsecret|appkey|auth_key)(['\"]?\s*[:=]\s*['\"]?)(bearer\s+)?([A-Za-z0-9._\-+/=]{8,})")
 
@@ -19,6 +20,7 @@ def redact(text: object) -> str:
     s = str(text)
     s = _PARAM.sub(lambda m: f"{m.group(1)}=•••", s)
     s = _JSON.sub(lambda m: f"{m.group(1)}•••{m.group(3)}", s)
+    s = _ECOS.sub(lambda m: f"{m.group(1)}•••", s)
     s = _BOT.sub("/bot•••", s)
     s = _HEADER.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3) or ''}•••", s)
     return s

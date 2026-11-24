@@ -373,6 +373,10 @@ def register_routes(app: Flask) -> None:
     def knowledge():
         return render_template("knowledge.html", nav="knowledge", ktab="finance")
 
+    @app.get("/knowledge/indicators")
+    def knowledge_indicators():
+        return render_template("knowledge_indicators.html", nav="knowledge", ktab="indicators", v=data.indicators(ctx()))
+
     @app.get("/knowledge/realestate")
     def knowledge_realestate():
         return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate")

@@ -32,7 +32,7 @@ ITEM_LABELS = {
     "investor": "투자자 수급", "disclosures": "공시", "watch_short_credit": "공매도·신용", "outlook": "참고 점수",
 }
 UNRECOVERABLE = ["universe", "nxt_prices"]
-JOB_LABELS = {"dart_poll": "공시 조회", "morning": "아침 작업", "backup": "백업", "backfill": "과거 데이터 채우기",
+JOB_LABELS = {"macro": "📊 지표 수집", "dart_poll": "공시 조회", "morning": "아침 작업", "backup": "백업", "backfill": "과거 데이터 채우기",
               "report": "일일 보고", "watchdog": "감시"}
 
 
@@ -257,6 +257,60 @@ def _market_cached(data_dir: str, day: str, mtime: float, ov_mtime: float):
     return marketmod.overview(Store(data_dir), dt.date.fromisoformat(day))
 
 
+def _safe(fn, ctx):
+    try:
+        return fn(ctx)
+    except Exception:  # noqa: BLE001 — 홈 화면이 지표 때문에 깨지지 않게
+        return None
+
+
+def indicators(ctx: Ctx) -> dict:
+    """📊 지표 화면."""
+    from ..analysis import macro as macromod
+    v = macromod.view(ctx.store, now_kst().date())
+    for g in v["groups"]:
+        for c in g["cards"]:
+            if not c.get("empty"):
+                c["spark_svg"] = charts.sparkline(c["spark"], 96, 28, zero=False)
+    v["ecos_key"] = ctx.ecos.configured
+    return v
+
+
+def home_market(ctx: Ctx) -> dict:
+    """홈 '시장 한눈에' 2열 6칸: 코스피·코스닥(KRX) · 원/달러·국고채 3년·미국채 10년(지표) · EWY(밤사이)."""
+    from ..analysis import macro as macromod
+    today = now_kst().date()
+    mk = market_overview(ctx) or {}
+    cells = []
+    for ix in mk.get("index", []):
+        cells.append({"label": ix["name"], "value": _num(ix.get("close")), "fmt": "idx", "chg": _num(ix.get("change_pct")),
+                      "chg_kind": "pct", "when": f"{mk['day']:%m/%d} 종가"})
+    try:
+        mc = macromod.home_cells(ctx.store, today)
+    except Exception:  # noqa: BLE001
+        mc = {}
+    ov = {o["symbol"]: o for o in mk.get("overseas", [])}
+    if "usdkrw" in mc:
+        c = mc["usdkrw"]
+        cells.append({"label": "원/달러", "value": c["value"], "fmt": "won", "chg": c["chg"], "chg_kind": "pct",
+                      "when": f"{c['date']:%m/%d} 기준 · 1개월", "stale": c["stale"]})
+    elif "KRW=X" in ov:
+        o = ov["KRW=X"]
+        cells.append({"label": "원/달러", "value": o["close"], "fmt": "won", "chg": o["change_pct"], "chg_kind": "pct",
+                      "when": "밤사이"})
+    for name, label in (("kr_3y", "국고채 3년"), ("us_10y", "미국채 10년")):
+        if name in mc:
+            c = mc[name]
+            cells.append({"label": label, "value": c["value"], "fmt": "rate", "chg": c["chg"], "chg_kind": "pp",
+                          "when": f"{c['date']:%m/%d} 기준 · 1개월", "stale": c["stale"]})
+    if "EWY" in ov:
+        o = ov["EWY"]
+        cells.append({"label": "EWY (미국 상장 한국)", "value": o["close"], "fmt": "usd", "chg": o["change_pct"],
+                      "chg_kind": "pct", "when": f"{o['date']} 밤사이"})
+    soon = [e for e in macromod.upcoming_events(today, 3) if e["dday"] <= 3]
+    return {"cells": cells, "soon": soon, "day": mk.get("day")}
+
+
 def market_overview(ctx: Ctx) -> dict | None:
     day = ref_day(ctx)
     if not day:
@@ -361,7 +415,7 @@ def dashboard(ctx: Ctx) -> dict:
         "api_ok": sum(1 for a in apis if a["state"] == "ok"),
         "api_bad": sum(1 for a in apis if a["state"] == "fail"),
         "api_missing": sum(1 for a in apis if a["state"] == "missing" and not a.get("optional")),
-        "n_scored": len(out_df), "live": live,
+        "n_scored": len(out_df), "live": live, "home_market": _safe(home_market, ctx),
     }
 
 
@@ -707,7 +761,13 @@ def ops(ctx: Ctx) -> dict:
             "backups": backups[-10:], "other": other, "login": ctx.store.login_fail_summary(time.time() - 86400), "verify": _verify_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)),
             "avoid": _avoid_cached(ctx.store.data_dir.as_posix(), _mtime(ctx), _outlook_mtime(ctx)), "first_week": first_week,
             "fc_live": fcmod.live_record(ctx.store), "fc_model": fcmod.MODEL_VERSION,
-            "remote_backup": bool(ctx.settings.get("BACKUP_CMD")), "deploy": deploy_info(ctx)}
+            "remote_backup": bool(ctx.settings.get("BACKUP_CMD")), "deploy": deploy_info(ctx),
+            "schedule_gap": _schedule_gap()}
+
+
+def _schedule_gap():
+    from ..analysis import macro as macromod
+    return macromod.schedule_gap(now_kst().date())
 
 
 DEPLOY_RESULTS = {"current": "최신", "updated": "방금 업데이트", "busy": "작업 중이라 미룸", "bad_commit": "전에 실패한 커밋이라 건너뜀",

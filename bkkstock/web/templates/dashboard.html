@@ -62,17 +62,21 @@
   {% endif %}
 </section>
 
-{% set mk = d.market %}
-{% if mk %}
-<section class="card mk-line">
-  <div class="mk-row">
-    {% for ix in mk.index %}<span><em>{{ ix.name }}</em> <b class="num">{{ ix.close | num(2) }}</b> {{ m.chg(ix.change_pct) }}</span>{% endfor %}
-    {% for o in mk.overseas %}<span><em>{{ o.label }}</em> {{ m.chg(o.change_pct) }}</span>{% endfor %}
-    <span><em>오른·내린</em> <b class="up">{{ mk.up | num }}</b>·<b class="down">{{ mk.down | num }}</b></span>
+{% set hm = d.home_market %}
+<section class="card mk-home">
+  <div class="card-head"><h2>🌐 시장 한눈에</h2><a href="/knowledge/indicators" class="pill">📊 지표 전체 →</a></div>
+  {% if hm and hm.soon %}<p class="small">{% for e in hm.soon %}<span class="dday soon" style="padding:2px 8px">{{ '오늘' if e.dday == 0 else 'D-%d' % e.dday }}</span> {{ e.kind }} {{ e.date.month }}/{{ e.date.day }} {% endfor %}</p>{% endif %}
+  {% if hm and hm.cells %}
+  <div class="mk-grid">
+    {% for c in hm.cells %}
+    <div class="cell {{ 'stale' if c.stale }}"><em>{{ c.label }}</em>
+      <b>{% if c.fmt == 'rate' %}{{ '%.2f' % c.value }}%{% elif c.fmt == 'won' %}{{ c.value | num(1) }}원{% elif c.fmt == 'usd' %}${{ '%.2f' % c.value }}{% else %}{{ c.value | num(2) }}{% endif %}</b>
+      {% if c.chg is not none %}{% if c.chg_kind == 'pp' %}<span class="small {{ 'up' if c.chg > 0 else 'down' if c.chg < 0 }}">{{ '▲' if c.chg > 0 else '▼' if c.chg < 0 else '' }}{{ '%.2f' % (c.chg | abs) }}%p</span>{% else %}<span class="small">{{ m.chg(c.chg) }}</span>{% endif %}{% endif %}
+      <small>{{ c.when }}</small></div>
+    {% endfor %}
   </div>
-  <p class="muted small">{{ mk.day }} 기준 시장 한 줄 · 해외는 밤사이 마지막 종가</p>
+  {% else %}<p class="empty">아직 시장 자료가 없습니다.</p>{% endif %}
 </section>
-{% endif %}
 
 {% set lr = d.last_run %}
 <section class="card status-line">

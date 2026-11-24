@@ -366,7 +366,32 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 }
 
 /* 지식: 금융 / 부동산 탭 */
-.ktabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px; }
+.ktabs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px; }
 .ktab { text-align: center; padding: 11px 8px; border-radius: calc(var(--radius) - 3px); font-weight: 700; color: var(--muted); }
 .ktab.on { background: var(--soft); color: var(--fg); }
 .ktab:hover { text-decoration: none; color: var(--fg); }
+
+/* 📊 지표 */
+.ind-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.ind-card:last-child { border-bottom: 0; }
+.ind-card .nm { font-weight: 700; }
+.ind-card .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ind-card .meta { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ind-card .what { grid-column: 1 / -1; color: var(--muted); font-size: .84rem; }
+.ind-card.stale .val { color: var(--muted); }
+.ind-card .spark { width: 96px; height: 28px; }
+.ind-card .spark .c-line { stroke: var(--muted); }
+.yrpos { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); }
+.yrpos .bar { position: relative; width: 70px; height: 6px; background: var(--soft); border-radius: 3px; }
+.yrpos .bar i { position: absolute; top: -3px; width: 4px; height: 12px; margin-left: -2px; background: var(--fg); border-radius: 2px; }
+.evt { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 0; }
+.dday { text-align: center; font-weight: 800; font-size: .85rem; padding: 4px 0; border-radius: 8px; background: var(--soft); }
+.dday.soon { background: var(--warn-bg); color: var(--warn); }
+/* 홈: 시장 한눈에 2열 격자 */
+.mk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.mk-grid .cell { padding: 8px 10px; border-radius: 10px; background: var(--soft); min-width: 0; }
+.mk-grid .cell em { display: block; font-style: normal; font-size: .78rem; color: var(--muted); }
+.mk-grid .cell b { font-variant-numeric: tabular-nums; }
+.mk-grid .cell small { display: block; font-size: .72rem; color: var(--muted); }
+.mk-grid .cell.stale b { color: var(--muted); }
+@media (min-width: 900px) { .mk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

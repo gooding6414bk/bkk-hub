@@ -384,6 +384,9 @@ def run(ctx: Ctx, day: dt.date | None = None, force: bool = False, only: list[st
                       compare_prev=name not in ("watch_short_credit",), deferrable=name in DEFERRABLE)
         status = steps.overall()
         ctx.store.finish_run(rid, status, steps.summary())
+        if not only:                       # 📊 지표 (한은 금리·환율은 그날 저녁에 올라온다). 실패해도 수집 결과와 무관
+            from .macro import safe_collect
+            log.info("macro %s", safe_collect(ctx))
         send_pending_alerts(ctx)
         log.info("daily %s %s", day, status)
         return {"status": status, "run_id": rid, "items": steps.summary()}

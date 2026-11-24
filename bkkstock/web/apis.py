@@ -54,8 +54,17 @@ APIS = [
         "steps": ["네이버 개발자센터 → 애플리케이션 등록", "사용 API에서 '검색' 선택", "Client ID와 Secret 확인"],
     },
     {
-        "id": "overseas", "name": "해외 시세 (야후 파이낸스, 키 불필요)", "status_ids": ["overseas"], "public": True,
-        "purpose": "밤사이 미국 상장 한국 ETF(EWY)·필라델피아 반도체·나스닥·원/달러. 내일 예측가와 시장 개요에 씁니다.",
+        "id": "ecos", "name": "한국은행 ECOS (지표)", "status_ids": ["ecos"], "optional": True,
+        "purpose": "📊 지표 화면의 한국 기준금리·국고채 3·10년·원/달러·원/엔·원/위안(매매기준율)·소비자물가. 하루 한 번(저녁·아침) 1년치를 받습니다.",
+        "keys": [("ECOS_API_KEY", "인증키")],
+        "site": "https://ecos.bok.or.kr/api/",
+        "steps": ["ecos.bok.or.kr → Open API → 회원가입", "인증키 신청 (무료, 사용 목적: 개인 투자 참고)",
+                  "발급된 인증키를 아래 칸에 붙여넣고 '연결 테스트'"],
+        "notes": "키가 없어도 보드는 그대로 돌고, 지표 화면의 한국 금리·환율 칸만 비어 있습니다.",
+    },
+    {
+        "id": "overseas", "name": "해외 시세 (야후 파이낸스, 키 불필요)", "status_ids": ["overseas", "overseas_macro"], "public": True,
+        "purpose": "밤사이 미국 상장 한국 ETF(EWY)·필라델피아 반도체·나스닥·원/달러 → 내일 예측가와 시장 개요. 미국채 10년·VIX·달러인덱스 → 📊 지표.",
         "keys": [], "site": "https://finance.yahoo.com/quote/EWY",
         "steps": ["키가 필요 없습니다. 비공식 경로라 막히면 내일 예측가의 '해외 반영' 부분만 빠지고 변동 범위는 그대로 나옵니다."],
     },
@@ -92,4 +101,6 @@ def run_test(ctx, api_id: str) -> str:
         return ctx.tg.test()
     if api_id == "overseas":
         return ctx.overseas.test()
+    if api_id == "ecos":
+        return ctx.ecos.test()
     raise KeyError(api_id)

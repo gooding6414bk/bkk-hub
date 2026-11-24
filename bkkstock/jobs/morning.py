@@ -55,6 +55,8 @@ def _run(ctx: Ctx, today, out: dict) -> None:
         out["overseas"] = collect_overseas(ctx)
     except Exception as e:  # noqa: BLE001
         out["overseas"] = str(e)
+    from .macro import safe_collect
+    out["macro"] = safe_collect(ctx)       # 📊 지표 — 저녁에 놓쳤거나 주말이면 아침에
     try:
         out["forecast"] = save_forecasts(ctx)
     except Exception as e:  # noqa: BLE001

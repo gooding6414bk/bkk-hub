@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from ..clients.base import ApiError, NotConfigured
 from ..clients.dart import DartClient
 from ..clients.datagokr import DataGoKrClient
+from ..clients.ecos import EcosClient
 from ..clients.kis import KisClient
 from ..clients.krx import KrxClient
 from ..clients.news import NewsClient
@@ -33,13 +34,15 @@ class Ctx:
     tg: Telegram
     datagokr: DataGoKrClient
     overseas: OverseasClient
+    ecos: EcosClient
 
 
 def make_ctx(settings: Settings | None = None) -> Ctx:
     s = settings or get_settings()
     store = Store(s.data_dir)
     return Ctx(s, store, KisClient(s, store), KrxClient(s, store), DartClient(s, store),
-               NewsClient(s, store), Telegram(s, store), DataGoKrClient(s, store), OverseasClient(s, store))
+               NewsClient(s, store), Telegram(s, store), DataGoKrClient(s, store), OverseasClient(s, store),
+               EcosClient(s, store))
 
 
 class AlreadyRunning(Exception):

@@ -355,3 +355,20 @@ def test_kis_token_issued_once_under_concurrency(settings, store):
     [t.start() for t in ts]
     [t.join() for t in ts]
     assert n["token"] == 1
+
+
+def test_indicators_page_and_home_grid(client):
+    import datetime as dt
+    from tests.test_macro import _seed_macro
+    from bkkstock.timeutil import now_kst
+    c, appmod = client
+    login(c)
+    page = c.get("/knowledge/indicators").get_data(as_text=True)
+    assert "📊 지표" in page and "ECOS 키" in page and "다가오는 일정" in page and "매수·매도 신호" in page
+    _seed_macro(appmod.ctx().store, now_kst().date())
+    page = c.get("/knowledge/indicators").get_data(as_text=True)
+    assert "국고채 3년" in page and "1년 중" in page and "1개월" in page
+    home = c.get("/").get_data(as_text=True)
+    assert "시장 한눈에" in home and 'href="/knowledge/indicators"' in home
+    apis = c.get("/apis").get_data(as_text=True)
+    assert "한국은행 ECOS" in apis and "ECOS_API_KEY" in apis

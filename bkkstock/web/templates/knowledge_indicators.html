@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% import "_m.html" as m %}
+{% block title %}지표{% endblock %}
+{% macro valfmt(c) -%}
+{%- if c.unit == '%' %}{{ '%.2f' % c.value }}%{% elif c.unit == '원' %}{{ c.value | num(2 if c.value < 300 else 1) }}원{% else %}{{ '%.2f' % c.value }}{% endif -%}
+{%- endmacro %}
+{% macro chgfmt(c) -%}
+{%- if c.chg is none %}<span class="muted">–</span>
+{%- elif c.mode == 'pp' %}<span class="{{ 'up' if c.chg > 0 else 'down' if c.chg < 0 else 'muted' }}">{{ '▲' if c.chg > 0 else '▼' if c.chg < 0 else '' }}{{ '%.2f' % (c.chg | abs) }}%p</span>
+{%- else %}{{ m.chg(c.chg) }}{% endif -%}
+{%- endmacro %}
+{% block content %}
+{% include "_knowledge_tabs.html" %}
+<section class="card">
+  <div class="card-head"><h2>📊 지표</h2><span class="muted small">하루 1번 · 실시간 아님</span></div>
+  <p class="small">금리·환율·위험·물가를 한눈에 봅니다. 변화는 <b>1개월 전 대비</b>이고, 막대는 <b>지금 값이 지난 1년 중 어디쯤</b>인지입니다(왼쪽 = 1년 최저, 오른쪽 = 최고).</p>
+  <p class="muted small">지표로 오를지 내릴지는 맞히기 어렵습니다(연구·실측 모두). 사고팔 신호가 아니라 '지금 바깥 날씨'로만 보세요. <a href="/knowledge#econ">지표 읽는 법</a></p>
+  {% if not v.ecos_key %}<p class="warnbox small">한국 금리·환율·물가는 한국은행 ECOS 키가 있어야 나옵니다. <a href="/apis" class="pill">키 넣기</a></p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>🗓 다가오는 일정</h2><span class="muted small">확인 {{ v.events_checked }}</span></div>
+  {% for e in v.events %}
+  <div class="evt"><span class="dday {{ 'soon' if e.dday <= 3 }}">{{ '오늘' if e.dday == 0 else 'D-%d' % e.dday }}</span>
+    <div><b>{{ e.kind }}</b> {{ e.date.month }}/{{ e.date.day }}({{ '월화수목금토일'[e.date.weekday()] }}) <span class="muted small">· {{ e.desc }}</span></div></div>
+  {% else %}<p class="empty">등록된 일정이 없습니다.</p>{% endfor %}
+  <p class="muted small">발표일이라고 피해야 한다는 근거는 없습니다. 놀라지 않게 미리 알아 두는 용도입니다.</p>
+</section>
+
+{% for g in v.groups %}
+<section class="card">
+  <div class="card-head"><h2>{{ g.title }}</h2></div>
+  {% for c in g.cards %}
+  <div class="ind-card {{ 'stale' if c.stale }}">
+    <span class="nm">{{ c.label }}</span>
+    {% if c.empty %}<span class="val muted">–</span>
+    <span class="what">{{ '한국은행 ECOS 키를 넣으면 나옵니다.' if not v.ecos_key and c.name in ('kr_base','kr_3y','kr_10y','usdkrw','jpykrw','cnykrw','kr_cpi_yoy') else '아직 받은 자료가 없습니다 — 다음 수집(저녁·아침) 뒤에 보입니다.' }}</span>
+    {% else %}
+    <span class="val">{{ valfmt(c) }}</span>
+    <div class="meta">
+      <span class="small">1개월 {{ chgfmt(c) }}</span>
+      <span class="yrpos" title="1년 최저 {{ '%.2f' % c.lo }} · 최고 {{ '%.2f' % c.hi }}">1년 중 <span class="bar"><i style="left: {{ '%.0f' % c.pos }}%"></i></span></span>
+      {{ c.spark_svg | safe }}
+    </div>
+    <span class="what">{{ c.meaning }}</span>
+    <span class="what">{{ c.shown }} 기준 · {{ c.source }}{% if c.stale %} · <span class="t-warn">지연 — 최근 값이 아님</span>{% endif %}{% if c.jump %} · <span class="t-warn">하루 변동이 커서 확인 필요</span>{% endif %}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+<section class="card">
+  <p class="muted small">출처: 한국은행 ECOS(한국 금리·환율 매매기준율·소비자물가), 야후 파이낸스(미국채 10년·VIX·달러인덱스, 비공식).
+    {% if v.fetched_at %}마지막 수집 {{ v.fetched_at | ts }}.{% endif %} 저녁 일일 수집과 아침 7:30·8:30에 받습니다.</p>
+  <p class="muted small">일부러 넣지 않은 것: 매수·매도 신호, 경기 국면 판단, 종합 점수·공포탐욕지수, 실시간 갱신.</p>
+</section>
+{% endblock %}
