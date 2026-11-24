@@ -364,3 +364,9 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
   .dash-watch td[data-label="참고 점수"] { display: none; }   /* 검증 전 점수는 메인 휴대폰 화면에서 뺀다 (종목·관리 화면에는 있음) */
   .live-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 8px; }
 }
+
+/* 지식: 금융 / 부동산 탭 */
+.ktabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px; }
+.ktab { text-align: center; padding: 11px 8px; border-radius: calc(var(--radius) - 3px); font-weight: 700; color: var(--muted); }
+.ktab.on { background: var(--soft); color: var(--fg); }
+.ktab:hover { text-decoration: none; color: var(--fg); }

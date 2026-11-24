@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}부동산 지식{% endblock %}
+{% macro src() -%}<p class="muted small src">확인 2026-11-24 · 출처: {{ caller() }}</p>{%- endmacro %}
+{% block content %}
+{% include "_knowledge_tabs.html" %}
+<section class="card">
+  <div class="card-head"><h2>🏠 부동산 지식</h2><span class="muted small">2026-11 기준 정리</span></div>
+  <p class="small">사고(취득세), 갖고 있고(재산세·종부세), 파는(양도세) 단계별 세금과 대출 규제를 모았습니다. 부동산 규제는 대책이 나올 때마다 바뀝니다.
+    계약 전에는 맨 아래 공식 사이트와 세무사·은행에서 꼭 확인하세요. <b>확인 필요</b>는 국회 심의 중이거나 출처마다 다른 내용입니다.</p>
+  <p class="muted small">각 항목 끝에 확인한 날짜와 출처가 있습니다. 다시 볼 때: 대책 발표 때 · 1월(세법 시행) · 6월 1일 전(보유세 기준일).</p>
+</section>
+
+<details class="card fold" id="now">
+  <summary><b>지금 상황 한눈에 (2026-11)</b></summary>
+  <ul class="small">
+    <li><b>규제지역</b>: 서울 25개 구 전체 + 경기 12곳(2025-10-16, 10·15 대책)이 투기과열지구·조정대상지역·토지거래허가구역으로 묶임.
+      2026-07-01 경기 화성 동탄구·용인 기흥구·구리시가 추가돼 경기 15곳 (<b>확인 필요</b>: 국토교통부 공고).</li>
+    <li><b>대출</b>: 수도권·규제지역 주담대 한도는 집값 15억 이하 6억 · 25억 이하 4억 · 25억 초과 2억, 규제지역 LTV 40%.</li>
+    <li><b>양도세</b>: 다주택자 중과 유예가 <b>2026-05-09로 끝남</b> — 5월 10일 양도분부터 조정대상지역 주택은 2주택 +20%p, 3주택 +30%p.</li>
+    <li><b>보유세</b>: 2026 세제개편 정부안(종부세 실거주 1주택 공제 14억, 공정시장가액비율 인상, 장기보유특별공제 거주 중심 개편)이 국회 심의 중. 확정 전.</li>
+  </ul>
+</details>
+
+<details class="card fold" id="buy">
+  <summary><b>살 때 — 취득세</b> <span class="muted small">잔금일부터 60일 안에 신고·납부</span></summary>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>몇 번째 집</th><th>조정대상지역</th><th>그 밖의 지역</th></tr></thead>
+    <tbody>
+      <tr><td>1주택</td><td colspan="2">6억 이하 1% · 6~9억 1~3%(가격에 따라 올라감) · 9억 초과 3%</td></tr>
+      <tr><td>2주택</td><td><b>8%</b> (일시적 2주택은 1~3%)</td><td>1~3%</td></tr>
+      <tr><td>3주택</td><td><b>12%</b></td><td>8%</td></tr>
+      <tr><td>4주택 이상 · 법인</td><td>12%</td><td>12%</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="small">
+    <li>지방교육세가 붙고, 전용 85㎡ 넘으면 농어촌특별세도 붙음. 실제 낼 돈은 위 세율보다 조금 많음.</li>
+    <li><b>생애최초</b>: 본인·배우자 모두 집을 가진 적이 없고 12억 원 이하면 최대 <b>200만 원</b> 감면 (전입·실거주 조건, 어기면 추징).
+      <b>확인 필요</b>: 인구감소지역 한도 상향 등 2026년 개정은 위택스에서.</li>
+    <li><b>증여로 받으면</b> 취득세 3.5%, 조정대상지역 공시가 3억 원 이상이면 12%.</li>
+    <li>주택 수에는 분양권·입주권·주거용 오피스텔도 들어갈 수 있음. 계약 전에 내 주택 수부터 세어 보기.</li>
+  </ul>
+  {% call src() %}<a href="https://propinfo.kr/chwideukse-yul-2026/" target="_blank" rel="noopener">2026 취득세율 정리</a> · <a href="https://www.wetax.go.kr" target="_blank" rel="noopener">위택스</a>{% endcall %}
+</details>
+
+<details class="card fold" id="hold">
+  <summary><b>갖고 있을 때 — 재산세 · 종부세</b> <span class="muted small">6월 1일 소유자가 1년치를 냄</span></summary>
+  <ul class="small">
+    <li><b>기준일 6월 1일</b>: 그날 등기상 주인이 그해 재산세·종부세를 다 냄. 팔 사람은 6월 1일 전에 잔금, 살 사람은 6월 2일 이후 잔금이 유리.</li>
+    <li><b>재산세</b> (7월·9월에 반씩): 공시가격 × 공정시장가액비율(일반 60%, 1주택 특례 43~45%) × 세율 0.1~0.4%.
+      1주택 특례세율(0.05%p 낮음)은 2026년 말까지 연장된 것으로 안내됨 — 2027년 연장 여부 <b>확인 필요</b>.</li>
+    <li><b>종합부동산세</b> (12월 1~15일): (공시가격 합계 − 공제) × 공정시장가액비율 60% × 세율.
+      공제는 1세대 1주택 <b>12억 원</b>, 그 밖은 9억 원. 세율 2주택 이하 0.5~2.7%, 3주택 이상은 과세표준 12억 원 초과분 2.0~5.0%.</li>
+    <li><b>1주택자 세액공제</b>: 나이(60세 이상 20~40%)와 보유기간(5년 이상 20~50%)을 합쳐 최대 80%. 부부 공동명의 1주택은 '각자 9억 공제' 또는 '1주택 특례(12억 + 세액공제)' 중 유리한 쪽을 9월에 신청.</li>
+    <li><b>확인 필요 — 2026 세제개편 정부안</b> (국회 심의 중, 2027년 시행 목표): 실제 사는 1주택은 공제 14억 원으로 올리고, 거주하지 않는 1주택은 공제를 줄이며,
+      공정시장가액비율을 70% → 80%로 단계 인상, 세율을 주택 수가 아니라 가격 기준으로 정리. 비거주 1주택 공제액은 보도마다 다름(9억·12억).</li>
+  </ul>
+  {% call src() %}<a href="https://www.segye.com/daumview/20260824517924" target="_blank" rel="noopener">세계일보 2026 부동산 세제 개편안</a> · <a href="https://supple.kr/news/cmu1qfd4e002ggwj5bbhj8p7f" target="_blank" rel="noopener">2026 종부세 개편</a> · <a href="https://www.realtyprice.kr" target="_blank" rel="noopener">공시가격 알리미</a>{% endcall %}
+</details>
+
+<details class="card fold" id="sell">
+  <summary><b>팔 때 — 양도소득세</b> <span class="muted small">판 달의 말일부터 2개월 안에 신고</span></summary>
+  <ul class="small">
+    <li><b>1세대 1주택 비과세</b>: 2년 이상 보유(조정대상지역에서 샀으면 2년 거주도)하면 실거래가 <b>12억 원까지</b> 세금 없음. 12억 원 넘는 부분만 과세.</li>
+    <li><b>일시적 2주택</b>: 새 집을 산 날부터 3년 안에 예전 집을 팔면 예전 집은 1주택처럼 비과세 (예전 집 2년 보유 등 조건).</li>
+    <li><b>세율</b>: 보유 1년 미만 70%, 2년 미만 60%, 2년 이상은 종합소득세율 6~45% (지방소득세 10% 별도).</li>
+    <li><b>장기보유특별공제</b>(양도차익에서 빼 줌): 3년 이상 보유하면 일반은 1년에 2%씩 최대 30%.
+      1세대 1주택(2년 이상 거주)은 보유 연 4%(최대 40%) + 거주 연 4%(최대 40%) = 최대 <b>80%</b>.</li>
+    <li><b>다주택자 중과 다시 시행</b>: 유예가 2026-05-09로 끝나, 5월 10일 양도분부터 조정대상지역 주택은 기본세율에 2주택 <b>+20%p</b>, 3주택 이상 <b>+30%p</b>
+      (지방세 포함 최고 82.5%), 장기보유특별공제도 못 받음. 5월 9일 전에 계약한 경우의 유예(4~6개월)는 지역마다 달라 세무사 확인.</li>
+    <li><b>확인 필요 — 장기보유특별공제 개편 정부안</b>: 1주택자 공제를 '보유'에서 '거주' 중심으로 바꿔 2029년부터 거주 연 8%(최대 80%)로, 양도차익이 큰 고가주택은 공제 한도 신설.
+      국회 심의 중이며 단계 시행 예정. 오래 보유만 하고 살지 않은 집은 불리해지는 방향.</li>
+    <li><b>이월과세</b>: 배우자·부모 등에게 증여받은 집을 10년 안에 팔면, 증여한 사람이 산 값으로 차익을 계산해 증여로 아낀 세금이 사라짐.</li>
+  </ul>
+  {% call src() %}<a href="https://www.taxnet.co.kr/contents/taxnetpost/post-detail?id=3411" target="_blank" rel="noopener">택스넷 중과 유예 종료</a> · <a href="https://www.kairnews.com/news/467378" target="_blank" rel="noopener">계약 기준 보완</a> · <a href="https://www.hankyung.com/article/202604202515O" target="_blank" rel="noopener">한경 장특공 개편 논의</a> · <a href="https://www.hometax.go.kr" target="_blank" rel="noopener">홈택스</a>{% endcall %}
+</details>
+
+<details class="card fold" id="loan">
+  <summary><b>대출 규제</b> <span class="muted small">LTV · DSR · 주담대 한도</span></summary>
+  <ul class="small">
+    <li><b>LTV</b> = 대출 ÷ 집값. <b>DSR</b> = 모든 대출의 1년 원리금 ÷ 연소득 (은행 40%, 2금융 50%까지). <b>스트레스 DSR</b> = 앞으로 금리가 오를 수 있다고 보고 금리를 더 얹어 한도를 계산 — 그만큼 한도가 줄어듦.</li>
+    <li><b>2025-06-27 대책</b>: 수도권·규제지역 주담대 최대 6억 원, 받으면 6개월 안에 전입, 다주택자는 수도권 주담대 추가 금지, 생애최초 LTV 70%.</li>
+    <li><b>2025-10-15 대책</b>: 서울 전역·경기 12곳을 규제지역 + 토지거래허가구역으로 지정 → 허가구역 주택은 사면 <b>2년 실거주 의무</b>(전세 끼고 사기 불가).
+      주담대 한도는 집값(시가) <b>15억 원 이하 6억 · 15~25억 4억 · 25억 초과 2억</b>. 규제지역 LTV 70% → <b>40%</b> (생애최초는 70%).
+      수도권·규제지역 주담대의 스트레스 금리 하한 1.5% → <b>3.0%</b>.</li>
+    <li><b>전세대출</b>: 1주택자가 수도권·규제지역에서 새로 받는(또는 늘리는) 전세대출은 이자를 DSR에 넣음 (2025-10-29부터). 같은 집에서 만기 연장만 하면 제외.</li>
+    <li><b>지방</b>: 스트레스 금리 0.75%, 지방 주담대 스트레스 DSR 3단계는 2026년 상반기까지 유예 — 7월 이후 적용 여부 <b>확인 필요</b>.</li>
+    <li>실제 한도는 '집값 구간 한도', 'LTV', 'DSR' 셋 중 가장 작은 값. 계약 전에 은행에서 미리 한도를 받아 보기.</li>
+  </ul>
+  {% call src() %}<a href="https://www.korea.kr/briefing/policyBriefingView.do?newsId=156722073" target="_blank" rel="noopener">정책브리핑 10·15 대책</a> · <a href="https://fsc.go.kr/no040101?cnId=2914" target="_blank" rel="noopener">금융위원회</a> · <a href="https://www.greened.kr/news/articleView.html?idxno=334096" target="_blank" rel="noopener">지방 DSR 유예</a>{% endcall %}
+</details>
+
+<details class="card fold" id="rent">
+  <summary><b>전세 · 월세 · 임대소득</b></summary>
+  <ul class="small">
+    <li><b>세입자 보호</b>: 이사 당일 전입신고 + 확정일자 (효력은 다음 날 0시). 계약 전 등기부등본에서 근저당·압류 확인, 잔금 날 다시 확인.</li>
+    <li><b>깡통전세 주의</b>: 전세금이 매매가의 70~80%를 넘으면 위험. 전세보증금 반환보증(HUG 등) 가입이 되는 집인지 계약 전에 확인.</li>
+    <li><b>집주인 임대소득세</b>: 1주택 월세는 비과세(공시가 12억 원 넘는 집 제외). 2주택 이상 월세는 과세. 3주택 이상은 보증금 합계 3억 원 넘는 부분에 이자 상당액(간주임대료) 과세.
+      연 2,000만 원 이하면 14% 분리과세 선택 가능. 5월 종합소득세 신고.</li>
+    <li>월세 사는 무주택 세대주는 연말정산 월세 세액공제 (총급여 8,000만 원 이하) — 💰 금융 탭의 연말정산 참고.</li>
+  </ul>
+  {% call src() %}<a href="https://www.khug.or.kr" target="_blank" rel="noopener">주택도시보증공사</a> · <a href="https://www.iros.go.kr" target="_blank" rel="noopener">인터넷등기소</a>{% endcall %}
+</details>
+
+<details class="card fold" id="basic">
+  <summary><b>부동산 기본</b></summary>
+  <ul class="small">
+    <li><b>가격 세 가지</b>: 실거래가(실제 판 값) · 공시가격(세금 기준, 보통 시세보다 낮음) · KB시세(은행 대출 기준으로 많이 씀).</li>
+    <li><b>규제지역 세 겹</b>: 투기과열지구(대출·청약), 조정대상지역(세금 중과), 토지거래허가구역(사려면 허가·실거주). 같은 동네가 셋 다일 수 있음.</li>
+    <li><b>청약 가점</b>(84점): 무주택 기간 32 + 부양가족 35 + 통장 가입기간 17. 청약통장 납입은 💰 금융 탭의 연말정산 공제와도 연결.</li>
+    <li><b>금리와 집값</b>: 금리가 오르면 이자 부담·DSR 한도 때문에 살 수 있는 사람이 줄어 거래가 먼저 줄고, 가격은 늦게 반응하는 편.</li>
+    <li><b>보유 비용 계산</b>: 대출 이자 + 재산세·종부세 + 관리비·수선비 − (월세 받으면) 임대수입. 집값 상승만 보지 말고 매년 나가는 돈을 같이 보기.</li>
+  </ul>
+</details>
+
+<section class="card" id="links">
+  <div class="card-head"><h2>공식 사이트에서 확인</h2></div>
+  <ul class="small">
+    <li><a href="https://www.wetax.go.kr" target="_blank" rel="noopener">위택스</a> — 취득세·재산세 계산과 납부</li>
+    <li><a href="https://www.hometax.go.kr" target="_blank" rel="noopener">홈택스</a> — 양도세·종부세 모의계산과 신고</li>
+    <li><a href="https://www.realtyprice.kr" target="_blank" rel="noopener">부동산 공시가격 알리미</a> — 우리 집 공시가격</li>
+    <li><a href="https://rt.molit.go.kr" target="_blank" rel="noopener">국토교통부 실거래가 공개시스템</a></li>
+    <li><a href="https://www.molit.go.kr" target="_blank" rel="noopener">국토교통부</a> — 규제지역 지정 공고 · <a href="https://www.fsc.go.kr" target="_blank" rel="noopener">금융위원회</a> — 대출 규제</li>
+    <li><a href="https://www.applyhome.co.kr" target="_blank" rel="noopener">청약홈</a> · <a href="https://www.khug.or.kr" target="_blank" rel="noopener">주택도시보증공사(HUG)</a> · <a href="https://www.iros.go.kr" target="_blank" rel="noopener">인터넷등기소</a></li>
+  </ul>
+  <p class="muted small">일반 정보입니다. 내 경우의 세금은 주택 수·취득일·거주기간에 따라 크게 달라지니 계약 전에 세무사·은행에 확인하세요.</p>
+</section>
+{% endblock %}

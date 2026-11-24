@@ -371,7 +371,11 @@ def register_routes(app: Flask) -> None:
 
     @app.get("/knowledge")
     def knowledge():
-        return page("knowledge.html")
+        return render_template("knowledge.html", nav="knowledge", ktab="finance")
+
+    @app.get("/knowledge/realestate")
+    def knowledge_realestate():
+        return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate")
 
     @app.get("/ops")
     def ops():

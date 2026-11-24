@@ -278,6 +278,18 @@ def test_knowledge_page(client):
     for word in ("IRP", "ISA", "퇴직연금", "노령연금", "증권거래세", "세액공제", "확인 필요", "국민연금공단", "건강보험"):
         assert word in page, word
     assert 'href="/knowledge"' in c.get("/").get_data(as_text=True)
+    assert 'href="/knowledge/realestate"' in page and "💰 금융" in page
+
+
+def test_realestate_knowledge_page(client):
+    c, _ = client
+    assert c.get("/knowledge/realestate").status_code == 302         # 로그인 필요
+    login(c)
+    page = c.get("/knowledge/realestate").get_data(as_text=True)
+    for word in ("🏠 부동산", "취득세", "재산세", "종합부동산세", "양도소득세", "장기보유특별공제", "LTV", "DSR", "토지거래허가구역",
+                 "확인 필요", "위택스", "확인 2026-11-24"):
+        assert word in page, word
+    assert 'class="on"' in page and "기발해" not in page            # 상단 메뉴는 '지식'이 켜짐
 
 
 def test_live_price_temporary_error_does_not_switch_market(client, monkeypatch):
