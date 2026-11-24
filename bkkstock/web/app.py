@@ -429,11 +429,19 @@ def register_routes(app: Flask) -> None:
             plan = movemod.Plan.from_dict(_json.loads(st.meta_get("move_plan") or "{}"))
         except ValueError:
             plan = movemod.Plan()
-        return render_template("knowledge_move.html", nav="knowledge", ktab="realestate", p=plan, r=movemod.calc(plan))
+        return render_template("knowledge_move.html", nav="knowledge", ktab="realestate", p=plan, r=movemod.calc(plan),
+                               wait=movemod.wait_effect(plan), sc=movemod.scenarios(plan), ht=movemod.holding_tax_note(plan))
 
     @app.get("/knowledge/realestate")
     def knowledge_realestate():
-        return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate")
+        import json as _json
+        from ..analysis import move as movemod
+        try:
+            plan = movemod.Plan.from_dict(_json.loads(ctx().store.meta_get("move_plan") or "{}"))
+        except ValueError:
+            plan = movemod.Plan()
+        return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate", p=plan,
+                               r=movemod.calc(plan), wait=movemod.wait_effect(plan), ht=movemod.holding_tax_note(plan))
 
     @app.get("/ops")
     def ops():

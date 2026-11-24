@@ -32,6 +32,9 @@ class Plan:
     cash: float = 0.0              # 지금 쓸 수 있는 현금·예금 (억)
     want_loan: bool = True         # 주담대를 쓸지
     note: str = ""                 # 메모 (단지 이름 등, 화면에만)
+    area: str = ""                 # 평형 (예: 25평 · 전용 59㎡)
+    owner: str = ""                # 명의 (예: 배우자 단독)
+    gongsi: float = 0.0            # 올해 공시가격 (억, 알리미에서) — 보유세 어림용
 
     @classmethod
     def from_form(cls, f) -> "Plan":
@@ -43,7 +46,8 @@ class Plan:
         return cls(sell_price=num("sell_price"), buy_cost=num("buy_cost"), expenses=num("expenses"),
                    hold_years=num("hold_years"), live_years=num("live_years"), exempt_ok=bool(f.get("exempt_ok")),
                    target_price=num("target_price"), target_over85=bool(f.get("target_over85")), cash=num("cash"),
-                   want_loan=bool(f.get("want_loan")), note=str(f.get("note", ""))[:60])
+                   want_loan=bool(f.get("want_loan")), note=str(f.get("note", ""))[:60],
+                   area=str(f.get("area", ""))[:30], owner=str(f.get("owner", ""))[:30], gongsi=num("gongsi"))
 
     @classmethod
     def from_dict(cls, d: dict) -> "Plan":
@@ -164,3 +168,40 @@ def calc(p: Plan) -> dict:
     return {"cg": cg, "sell_fee": sell_fee, "sell_fee_note": sell_fee_note, "net_sale": net_sale, "acq": acq,
             "buy_fee": buy_fee, "buy_fee_note": buy_fee_note, "loan": loan, "loan_note": loan_note,
             "need": need, "have": have, "gap": have - need, "ready": bool(sell and tgt)}
+
+
+def wait_effect(p: Plan) -> dict | None:
+    """같은 값에 '보유·거주 10년을 채우고' 팔면 양도세가 얼마나 줄어드나 (장기보유특별공제 최대 80%)."""
+    if not (p.sell_price and p.exempt_ok) or (p.hold_years >= 10 and p.live_years >= 10):
+        return None
+    now = capital_gains(p)
+    later = capital_gains(Plan(**{**p.to_dict(), "hold_years": max(10.0, p.hold_years), "live_years": max(10.0, p.live_years)}))
+    years = max(10 - p.hold_years, 10 - p.live_years, 0)
+    return {"now": now["total"], "later": later["total"], "save": now["total"] - later["total"], "years": years,
+            "rate_now": ltgd_rate(p)[0] * 100}
+
+
+def scenarios(p: Plan) -> list[dict]:
+    """갈 집 가격별로 '모자라는 돈'을 한 표에. 지금 집 매도가 기준 +4억·+9억·+14억과 사용자가 넣은 값."""
+    if not p.sell_price:
+        return []
+    prices = {round(p.sell_price + d) for d in (4, 9, 14)}
+    if p.target_price:
+        prices.add(round(p.target_price, 1))
+    out = []
+    for t in sorted(prices):
+        r = calc(Plan(**{**p.to_dict(), "target_price": float(t), "want_loan": True}))
+        out.append({"price": t, "loan": r["loan"], "acq": r["acq"]["total"], "fee": r["buy_fee"], "need": r["need"],
+                    "net_sale": r["net_sale"], "cash_needed": max(0.0, r["need"] - r["net_sale"] - r["loan"])})
+    return out
+
+
+def holding_tax_note(p: Plan) -> dict | None:
+    """1세대 1주택 종부세 대상인지만 어림 (공시가격 12억 원 공제). 정확한 세액은 홈택스 모의계산."""
+    if not p.gongsi:
+        return None
+    g = p.gongsi * EOK
+    over = max(0.0, g - 12 * EOK)
+    base = over * .60
+    return {"gongsi": g, "over": over, "base": base, "taxable": over > 0,
+            "rough": base * .005 if over else 0.0}     # 과세표준 3억 이하 0.5% (세액공제 전)

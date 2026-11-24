@@ -14,7 +14,12 @@
 <form method="post" class="card move-form" autocomplete="off">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <h3 style="margin-top:0">지금 집 (팔 집)</h3>
-  <label>메모 (단지 이름 등, 화면에만) <input name="note" value="{{ p.note }}" maxlength="60"></label>
+  <div class="grid-f">
+    <label>단지 이름 (이 서버에만 저장) <input name="note" value="{{ p.note }}" maxlength="60" placeholder="예: 우리 집"></label>
+    <label>평형 <input name="area" value="{{ p.area }}" maxlength="30" placeholder="예: 25평 · 전용 59㎡"></label>
+    <label>명의 <input name="owner" value="{{ p.owner }}" maxlength="30" placeholder="예: 배우자 단독"></label>
+    <label>올해 공시가격 (억, 선택) <input name="gongsi" inputmode="decimal" value="{{ p.gongsi or '' }}" placeholder="공시가격 알리미"></label>
+  </div>
   <div class="grid-f">
     <label>예상 매도가 (억) <input name="sell_price" inputmode="decimal" value="{{ p.sell_price or '' }}" placeholder="예: 20"></label>
     <label>취득가 (억) <input name="buy_cost" inputmode="decimal" value="{{ p.buy_cost or '' }}" placeholder="분양가·매수가"></label>
@@ -57,7 +62,23 @@
       <tr><td><b>{{ '남음' if r.gap >= 0 else '모자람' }}</b></td><td class="r num"><b class="{{ 'down' if r.gap < 0 }}">{{ eok(r.gap | abs) }}</b></td></tr>
     </tbody>
   </table></div>
+  {% if wait %}
+  <p class="small"><b>⏳ 기다리면</b>: 같은 값에 보유·거주 10년을 채운 뒤 팔면(약 {{ '%.1f' % wait.years }}년 뒤) 양도세 {{ man(wait.now) }} → <b>{{ man(wait.later) }}</b>, 약 <b>{{ man(wait.save) }}</b> 줄어듭니다 (장기보유특별공제 {{ '%.0f' % wait.rate_now }}% → 80%).
+    단, 그사이 집값·갈 집 값이 어떻게 움직일지와 장특공 개편 정부안(2028년부터 거주 중심, 고가주택 공제 한도)이 변수입니다.</p>
+  {% endif %}
   <p class="muted small">이사비·인테리어·등기 법무비·채권 할인·대출 중도상환수수료·보유세 일할(6월 1일 기준)은 빠져 있습니다. 보통 수천만 원 더 듭니다.</p>
+</section>
+{% endif %}
+
+{% if sc %}
+<section class="card">
+  <div class="sec-head"><h2>갈 집 가격별로 보면</h2><span class="small c3">대출은 수도권·규제지역 한도 기준</span></div>
+  <div class="tbl-wrap"><table class="dtable">
+    <thead><tr><th>갈 집</th><th>주담대 최대</th><th>취득세 등</th><th>중개보수</th><th>현금이 더 필요</th></tr></thead>
+    <tbody>{% for x in sc %}<tr><td><b>{{ '%.0f' % x.price }}억</b></td><td>{{ eok(x.loan) }}</td><td>{{ man(x.acq) }}</td><td>{{ man(x.fee) }}</td>
+      <td><b class="{{ 'down' if x.cash_needed > 0 }}">{{ eok(x.cash_needed) if x.cash_needed > 0 else '0 (남음)' }}</b></td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="small c3">'현금이 더 필요' = 갈 집 + 취득세 + 중개보수 − (지금 집 판 돈에서 양도세·중개보수 뺀 {{ eok(r.net_sale) }}) − 대출. 15억·25억을 넘는 순간 대출 한도가 6억 → 4억 → 2억으로 줄어서, 집값 차이보다 필요한 현금이 더 크게 늡니다.</p>
 </section>
 {% endif %}
 

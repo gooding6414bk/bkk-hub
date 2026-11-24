@@ -465,3 +465,18 @@ def test_settings_and_indicators_menu(client):
     for href in ('href="/"', 'href="/stocks"', 'href="/indicators"', 'href="/knowledge"', 'href="/settings"'):
         assert href in home, href
     assert "기발해" not in s and "🎬" not in home
+
+
+def test_realestate_myhome_explained_from_server_data(client):
+    c, appmod = client
+    login(c)
+    page = c.get("/knowledge/realestate").get_data(as_text=True)
+    assert "우리 집 숫자 넣기" in page
+    c.post("/knowledge/realestate/move", data={"csrf": c.environ_base["HTTP_X_CSRF"], "note": "시험단지", "area": "25평",
+           "owner": "배우자 단독", "gongsi": "13.5", "sell_price": "21", "buy_cost": "6.3", "expenses": "0.3",
+           "hold_years": "7", "live_years": "7", "exempt_ok": "on", "target_price": "30", "cash": "1", "want_loan": "on"})
+    page = c.get("/knowledge/realestate").get_data(as_text=True)
+    for word in ("시험단지", "25평", "배우자 단독 명의", "10년 채우면", "손에 남는 돈", "종부세 대상", "1세대"):
+        assert word in page, word
+    mv = c.get("/knowledge/realestate/move").get_data(as_text=True)
+    assert "갈 집 가격별로 보면" in mv and "기다리면" in mv

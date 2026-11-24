@@ -278,3 +278,5 @@ a.srow { color: inherit; }
   .stock-2col .aside .flow-tbl .p1, .stock-2col .aside .flow-tbl .p60, .stock-2col .aside .flow-tbl .pv { display: none; }
   .stock-2col .aside .tbl-wrap { overflow-x: auto; }
 }
+
+.myhome { padding-left: 1.2em; } .myhome li { margin: 8px 0; line-height: 1.6; }

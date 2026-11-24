@@ -38,3 +38,17 @@ def test_calc_gap():
     assert r["ready"] and r["loan"] == pytest.approx(2e8)
     assert r["gap"] == pytest.approx(r["net_sale"] + 2e8 + 2e8 - (30e8 + r["acq"]["total"] + r["buy_fee"]))
     assert r["gap"] < 0
+
+
+def test_wait_effect_and_scenarios():
+    p = move.Plan(sell_price=21, buy_cost=6.3, expenses=0.3, hold_years=7, live_years=7, exempt_ok=True, cash=1)
+    w = move.wait_effect(p)
+    assert w["rate_now"] == pytest.approx(56) and w["later"] < w["now"] and w["years"] == pytest.approx(3)
+    taxable = 14.4e8 * 9 / 21
+    assert w["later"] == pytest.approx(move.income_tax(taxable * .2 - 2_500_000) * 1.1)
+    sc = {round(x["price"]): x for x in move.scenarios(p)}
+    assert set(sc) == {25, 30, 35}
+    assert sc[25]["loan"] == pytest.approx(4e8) and sc[30]["loan"] == pytest.approx(2e8)
+    assert sc[30]["cash_needed"] > sc[25]["cash_needed"] + 5e8          # 25억을 넘으면 대출이 줄어 현금이 더 크게 는다
+    assert move.holding_tax_note(move.Plan(gongsi=11))["taxable"] is False
+    assert move.holding_tax_note(move.Plan(gongsi=14))["base"] == pytest.approx(2e8 * .6)
