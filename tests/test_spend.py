@@ -169,3 +169,16 @@ def test_fixed_telco_card_from_catalog_pushes_to_tier():
     r = sp.recommend(s, "마트", 100_000, DAY)
     fill = dict((n, v) for n, v, _ in r["options"][0]["parts"])["실적 채우기"]
     assert r["options"][0]["method"] == f"c:{c['id']}" and fill == pytest.approx(15_000 * 100_000 / 300_000)
+
+
+def test_tiered_rule_rate_and_cap():
+    s = state()
+    sp.import_presets(s, ["kbank-kt-double"], DAY)
+    c = s["cards"][0]
+    c.update(month_used=600_000, month="2026-10")                                          # 50만 구간: KT 요금 10%, 한도 1만
+    st = sp.card_status(s, c, DAY)
+    assert sp.card_discount(c, st, "고정", 80_000, "KT 휴대폰 요금")[0] == pytest.approx(8_000)
+    assert sp.card_discount(c, st, "고정", 150_000, "KT")[0] == pytest.approx(10_000)
+    c.update(month_used=250_000)                                                            # 20만 구간: 5%, 한도 5천
+    st = sp.card_status(s, c, DAY)
+    assert sp.card_discount(c, st, "고정", 80_000, "KT")[0] == pytest.approx(4_000)

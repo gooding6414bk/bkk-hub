@@ -381,6 +381,15 @@ def _cap_for(card: dict, prev_amt: float | None) -> float | None:
     return hit[-1] if hit else 0.0
 
 
+def _tv(card: dict, v, prev_amt: float | None) -> float:
+    """규칙 값: 숫자, 또는 전월 실적 구간별 [[실적, 값], ...] (구간 할인율·한도)."""
+    if not isinstance(v, list):
+        return float(v or 0)
+    amt = prev_amt if prev_amt is not None else (_tier(card) if card.get("prev_ok", True) else 0.0)
+    hit = [x for need, x in v if amt >= need]
+    return float(hit[-1]) if hit else 0.0
+
+
 def _bonus_won(card: dict, place: str, amount: float) -> float:
     return amount * float((card.get("bonus") or {}).get(place, 0)) / 100
 
@@ -396,10 +405,13 @@ def _best(card, place, merchant, amount, prev_amt, by_rule, cnt) -> tuple[float,
             continue
         if not _eligible(card, r.get("need", tier), prev_amt) or (r.get("times") and cnt.get(i, 0) >= r["times"]):
             continue
-        won = float(r["fixed"]) if r.get("fixed") else min(amount, float(r.get("upto") or amount)) * float(r.get("rate") or 0) / 100
+        if r.get("fixed"):
+            won = _tv(card, r["fixed"], prev_amt)
+        else:
+            won = min(amount, float(r.get("upto") or amount)) * _tv(card, r.get("rate"), prev_amt) / 100
         won = min(won, amount)
         if r.get("month_cap"):
-            won = min(won, max(0.0, float(r["month_cap"]) - by_rule.get(i, 0.0)))
+            won = min(won, max(0.0, _tv(card, r["month_cap"], prev_amt) - by_rule.get(i, 0.0)))
         if won > best[0]:
             best = (won, i, r.get("label", ""))
     return best
