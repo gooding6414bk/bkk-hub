@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_spend_macros.html" import won, man, meter, record_form with context %}
+{% from "_spend_macros.html" import won, man, meter, record_form, shop_list with context %}
 {% block title %}소비{% endblock %}
 {% block content %}
 {% include "_spend_tabs.html" %}
@@ -13,13 +13,14 @@
   <div class="grid-f">
     <label>어디서 <select name="place">{% for k, name, g, vs in places %}<option value="{{ k }}" {{ 'selected' if q.place == k }}>{{ name }}</option>{% endfor %}</select></label>
     <label>얼마 (원) <input name="amount" inputmode="numeric" value="{{ q.amount }}" placeholder="예: 32000" required></label>
+    <label>가게 이름 (선택) <input name="shop" list="shops" value="{{ q.shop }}" maxlength="40" placeholder="예: 스타벅스, GS25, CGV"></label>
   </div>
   <button type="submit">추천 보기</button>
-</form>
+</form>{{ shop_list() }}
 
 {% if rec %}
 <section class="card" id="result">
-  <div class="card-head"><h2>{{ rec.place_name }}에서 {{ won(rec.amount) }}</h2><span class="st">{{ rec.advice[0] }}</span></div>
+  <div class="card-head"><h2>{{ rec.merchant or rec.place_name }}에서 {{ won(rec.amount) }}</h2><span class="st">{{ rec.advice[0] }}</span></div>
   <ol class="opts">
   {% for o in rec.options %}
     <li class="{{ 'best' if loop.first }}{{ ' rest' if loop.index > 3 }}">
@@ -33,9 +34,11 @@
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="home">
     <input type="hidden" name="place" value="{{ rec.place }}"><input type="hidden" name="amount" value="{{ '%.0f' % rec.amount }}">
     <input type="hidden" name="method" value="{{ rec.options[0].method }}"><input type="hidden" name="date" value="{{ today }}">
-    <button type="submit">1순위로 냈어요 — 기록</button><a class="pill" href="/spend/records?place={{ rec.place }}&amount={{ '%.0f' % rec.amount }}">다른 수단으로 기록</a>
+    <input type="hidden" name="memo" value="{{ rec.merchant }}">
+    <button type="submit">1순위로 냈어요 — 기록</button><a class="pill" href="/spend/records?place={{ rec.place }}&amount={{ '%.0f' % rec.amount }}&shop={{ rec.merchant | urlencode }}">다른 수단으로 기록</a>
   </form>
-  <p class="muted small">공제로 돌아오는 세금은 올해 예상 사용액과 한계세율 {{ '%.1f' % (rec.rate * 100) }}%로 어림한 값입니다. 카드 월 할인 한도는 빠져 있습니다.</p>
+  {% if rec.hint %}<p class="small t-warn">가게 이름을 넣으면 카드의 가맹점 할인(스타벅스·편의점·CGV 등)도 따집니다.</p>{% endif %}
+  <p class="muted small">공제로 돌아오는 세금은 올해 예상 사용액과 한계세율 {{ '%.1f' % (rec.rate * 100) }}%로 어림한 값입니다. 카드 할인은 항목별·월 통합 한도와 횟수를 앱 기록 기준으로 반영합니다.</p>
 </section>
 {% endif %}
 
@@ -74,7 +77,7 @@
       {% if c.tier %}{{ meter(c.pct, 'ok' if c.left == 0 else '') }}
       <div class="small muted">{% if c.left %}다음 달 혜택까지 <b>{{ won(c.left) }}</b> 남음{% if c.benefit %} · 채우면 약 {{ won(c.benefit) }}{% endif %}{% else %}실적 채움 ✓{% endif %}
         {% if c.next_need and c.next_need > c.tier %} · {{ man(c.next_need) }} 넘기면 다음 달 {{ '할인' if c.fixed else '한도' }} {{ won(c.next_cap) }}{% endif %}</div>{% endif %}
-      {% if c.cap is not none %}<div class="small muted">{% if c.fixed %}이번 달 받는 정액 할인 {{ won(c.cap) }}{% else %}이번 달 추가 할인 한도 {{ won(c.cap) }} 중 <b>{{ won(c.cap_left) }}</b> 남음{% endif %}
+      {% if c.fixed_amt is not none or c.cap is not none %}<div class="small muted">{% if c.fixed %}이번 달 받는 정액 할인 {{ won(c.fixed_amt) }}{% else %}이번 달 할인 한도 {{ won(c.cap) }} 중 {{ won(c.got) }} 받음 · <b>{{ won(c.cap_left) }}</b> 남음{% endif %}
         <span class="c3">({% if c.prev_amt is not none %}지난달 {{ man(c.prev_amt) }} 사용 기준{% else %}지난달 실적은 지갑 표시 기준{% endif %})</span></div>{% endif %}
     </li>
   {% endfor %}</ul>

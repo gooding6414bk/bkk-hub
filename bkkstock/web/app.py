@@ -443,16 +443,17 @@ def register_routes(app: Flask) -> None:
     def spend_page(name, stab, sp, state, **kw):
         today = now_kst().date()
         return render_template(name, nav="spend", stab=stab, s=state, places=sp.PLACES, methods=sp.methods(state),
-                               today=today.isoformat(), year=today.year, **kw)
+                               today=today.isoformat(), year=today.year, brands=sp.brand_words(state), **kw)
 
     @app.get("/spend")
     def spend_home():
         sp, state = spend_state()
         today = now_kst().date()
         place, amount = request.args.get("place", ""), sp.num(request.args.get("amount"))
-        rec = sp.recommend(state, place, amount, today) if place in sp.PLACE and amount > 0 else None
+        shop = (request.args.get("shop") or "").strip()[:40]
+        rec = sp.recommend(state, place, amount, today, shop) if place in sp.PLACE and amount > 0 else None
         return spend_page("spend.html", "home", sp, state, d=sp.dashboard(state, today), rec=rec,
-                          q={"place": place or "동네", "amount": request.args.get("amount", "")})
+                          q={"place": place or "동네", "amount": request.args.get("amount", ""), "shop": shop})
 
     @app.route("/spend/wallet", methods=["GET", "POST"])
     def spend_wallet():
@@ -481,7 +482,8 @@ def register_routes(app: Flask) -> None:
                 ctx().store.meta_set("spend_state", sp.dump(state))
                 return redirect(url_for("spend_home") if request.form.get("back") == "home" else url_for("spend_records"))
         q = {"place": request.args.get("place") or request.form.get("place") or "동네",
-             "amount": request.args.get("amount") or request.form.get("amount") or ""}
+             "amount": request.args.get("amount") or request.form.get("amount") or "",
+             "shop": request.args.get("shop") or request.form.get("memo") or ""}
         return spend_page("spend_records.html", "records", sp, state, rows=sp.record_rows(state, now_kst().date()),
                           err=err, q=q), (400 if err else 200)
 

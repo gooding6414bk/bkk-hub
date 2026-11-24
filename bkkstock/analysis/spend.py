@@ -154,7 +154,7 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
                     "caps": parse_caps(f.get(f"c{i}_caps")),             # 전월 실적 구간별 월 할인 한도
                     "fixed": bool(f.get(f"c{i}_fixed")),                 # 정액 혜택(실적만 채우면 받는 통신비 할인 등)
                     "prev_ok": bool(f.get(f"c{i}_prev")),                # 지난달 실적을 모를 때만 씀
-                    "note": prev.get("note", ""), "preset": prev.get("preset", ""),
+                    "note": prev.get("note", ""), "preset": prev.get("preset", ""), "rules": prev.get("rules", []),
                     "month_used": prev.get("month_used"), "month": prev.get("month", "")}
             used = str(f.get(f"c{i}_month_used") or "").strip()
             if used:                                   # 카드 앱의 이번 달 이용액 — 다음 달엔 '지난달 실적'이 된다
@@ -181,7 +181,7 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
 
 
 def from_preset(preset: dict, state: dict, today: dt.date) -> dict:
-    keys = ("name", "kind", "base", "tier", "benefit", "bonus", "caps", "fixed", "note")
+    keys = ("name", "kind", "base", "tier", "benefit", "bonus", "caps", "fixed", "note", "rules")
     return {**{k: preset[k] for k in keys}, "id": _new_id(state), "preset": preset["key"], "prev_ok": True,
             "month_used": None, "month": ""}
 
@@ -346,77 +346,145 @@ def advice(proj: dict, fut: dict | None, t: float) -> tuple[str, str]:
 
 
 # ---------------- 카드 실적 ----------------
-def _cap_for(card: dict, amount: float | None) -> float | None:
-    """전월 실적 amount 로 받는 월 할인 한도(정액 카드는 월 할인액). None = 한도 없음."""
+USE_SHARE = .5            # % 할인 카드는 다음 달 한도가 오르면 그 절반쯤 쓴다고 어림 ('실적 채우기' 몫)
+
+
+def _match(rule: dict, place: str, merchant: str) -> bool:
+    """규칙이 이 결제에 맞나: 장소가 정해져 있으면 장소, 가맹점 이름이 정해져 있으면 가게 이름에 그 말이 들어 있어야."""
+    if rule.get("places") and place not in rule["places"]:
+        return False
+    words = rule.get("match") or []
+    if words:
+        m = str(merchant or "").lower().replace(" ", "")
+        return bool(m) and any(w.lower().replace(" ", "") in m for w in words)
+    return bool(rule.get("places"))
+
+
+def _eligible(card: dict, need: float, prev_amt: float | None) -> bool:
+    if not need:
+        return True
+    return prev_amt >= need if prev_amt is not None else bool(card.get("prev_ok", True))
+
+
+def _tier(card: dict) -> float:
+    return float(card.get("tier") or next((n for n, _ in card.get("caps") or [] if n > 0), 0))
+
+
+def _cap_for(card: dict, prev_amt: float | None) -> float | None:
+    """지난달 실적으로 정해지는 이번 달 통합 할인 한도(정액 카드는 할인액). None = 한도 없음."""
     caps = card.get("caps") or []
     if not caps:
         return None
-    if amount is None:                       # 지난달 실적을 모름 → 지갑의 '지난달 실적 채움' 표시대로 첫 구간
-        return caps[0][1] if card.get("prev_ok", True) else 0.0
-    hit = [cap for need, cap in caps if amount >= need]
+    if prev_amt is None:                     # 지난달 실적을 모름 → 지갑의 '지난달 실적 채움' 표시대로
+        prev_amt = _tier(card) if card.get("prev_ok", True) else 0.0
+    hit = [cap for need, cap in caps if prev_amt >= need]
     return hit[-1] if hit else 0.0
-
-
-def card_status(state: dict, card: dict, today: dt.date) -> dict:
-    this = today.strftime("%Y-%m")
-    prev = (today.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
-    mine = [r for r in state["records"] if r.get("method") == f"c:{card['id']}"]
-    used = sum(float(r["amount"]) for r in mine if str(r["date"])[:7] == this)
-    last = sum(float(r["amount"]) for r in mine if str(r["date"])[:7] == prev)
-    manual = card.get("month_used")
-    if manual is not None and card.get("month") == this:
-        used = max(used, float(manual))
-    prev_amt = last or None
-    if manual is not None and card.get("month") == prev:
-        prev_amt = max(last, float(manual))
-    caps = card.get("caps") or []
-    tier = float(card.get("tier") or (caps[0][0] if caps else 0))
-    prev_ok = True if not tier else (prev_amt >= tier if prev_amt is not None else bool(card.get("prev_ok", True)))
-    cap = _cap_for(card, prev_amt)
-    got = sum(_bonus_won(card, r["place"], float(r["amount"])) for r in mine if str(r["date"])[:7] == this)
-    nxt = next(((need, c) for need, c in caps if used < need), None)       # 이번 달에 넘으면 다음 달 한도가 오르는 구간
-    return {"used": used, "tier": tier, "left": max(0.0, tier - used), "prev_ok": prev_ok, "prev_amt": prev_amt,
-            "pct": min(100.0, used / tier * 100) if tier else 100.0, "cap": cap,
-            "cap_left": None if cap is None or card.get("fixed") else max(0.0, cap - got),
-            "next_need": nxt[0] if nxt else None, "next_cap": nxt[1] if nxt else None,
-            "days_left": calendar.monthrange(today.year, today.month)[1] - today.day}
 
 
 def _bonus_won(card: dict, place: str, amount: float) -> float:
     return amount * float((card.get("bonus") or {}).get(place, 0)) / 100
 
 
+def _best(card, place, merchant, amount, prev_amt, by_rule, cnt) -> tuple[float, int | None, str]:
+    """이 결제에 붙는 추가 할인 중 가장 큰 것(원, 규칙 번호, 설명). 항목 한도·횟수까지 — 통합 한도는 밖에서."""
+    best: tuple[float, int | None, str] = (0.0, None, "")
+    tier = _tier(card)
+    if _eligible(card, tier, prev_amt) and _bonus_won(card, place, amount) > 0:
+        best = (_bonus_won(card, place, amount), -1, f"{card['bonus'][place]:g}%")
+    for i, r in enumerate(card.get("rules") or []):
+        if not _match(r, place, merchant) or amount < float(r.get("min") or 0):
+            continue
+        if not _eligible(card, r.get("need", tier), prev_amt) or (r.get("times") and cnt.get(i, 0) >= r["times"]):
+            continue
+        won = float(r["fixed"]) if r.get("fixed") else min(amount, float(r.get("upto") or amount)) * float(r.get("rate") or 0) / 100
+        won = min(won, amount)
+        if r.get("month_cap"):
+            won = min(won, max(0.0, float(r["month_cap"]) - by_rule.get(i, 0.0)))
+        if won > best[0]:
+            best = (won, i, r.get("label", ""))
+    return best
+
+
+def _ledger(card: dict, recs: list, prev_amt, cap) -> tuple[float, dict, dict, dict]:
+    """한 달 기록을 날짜순으로 돌려 항목별·통합 한도 사용분과 기록별 할인을 쌓는다."""
+    total, by_rule, cnt, per = 0.0, {}, {}, {}
+    for r in sorted(recs, key=lambda r: (r["date"], r["id"])):
+        won, i, _ = _best(card, r.get("place"), r.get("memo", ""), float(r["amount"]), prev_amt, by_rule, cnt)
+        if cap is not None:
+            won = min(won, max(0.0, cap - total))
+        if i is not None and won > 0:
+            by_rule[i] = by_rule.get(i, 0.0) + won
+            cnt[i] = cnt.get(i, 0) + 1
+            total += won
+        per[r["id"]] = won
+    return total, by_rule, cnt, per
+
+
+def card_status(state: dict, card: dict, today: dt.date) -> dict:
+    this = today.strftime("%Y-%m")
+    prev = (today.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
+    mine = [r for r in state["records"] if r.get("method") == f"c:{card['id']}"]
+    cur = [r for r in mine if str(r["date"])[:7] == this]
+    used = sum(float(r["amount"]) for r in cur)
+    last = sum(float(r["amount"]) for r in mine if str(r["date"])[:7] == prev)
+    manual = card.get("month_used")
+    if manual is not None and card.get("month") == this:
+        used = max(used, float(manual))             # 카드 앱 숫자가 기록보다 정확하다
+    prev_amt = last or None
+    if manual is not None and card.get("month") == prev:
+        prev_amt = max(last, float(manual))
+    caps, tier, fixed = card.get("caps") or [], _tier(card), bool(card.get("fixed"))
+    amt = _cap_for(card, prev_amt)
+    cap = None if fixed else amt
+    got, by_rule, cnt, per = _ledger(card, cur, prev_amt, cap)
+    nxt = next(((need, c) for need, c in caps if used < need and need > 0), None)
+    return {"used": used, "tier": tier, "left": max(0.0, tier - used), "prev_ok": _eligible(card, tier, prev_amt),
+            "prev_amt": prev_amt, "pct": min(100.0, used / tier * 100) if tier else 100.0, "fixed_amt": amt if fixed else None,
+            "cap": cap, "cap_left": None if cap is None else max(0.0, cap - got), "got": got,
+            "by_rule": by_rule, "cnt": cnt, "per": per,
+            "next_need": nxt[0] if nxt else None, "next_cap": nxt[1] if nxt else None,
+            "days_left": calendar.monthrange(today.year, today.month)[1] - today.day}
+
+
 def card_rate(card: dict, place: str, prev_ok: bool) -> float:
-    """이 장소에서 받는 할인·적립 % (지난달 실적을 못 채우면 기본 적립만)."""
+    """장소별 % (기본 적립 + 지갑에 직접 넣은 장소 할인). 가맹점 규칙은 card_discount 에서."""
     return float(card.get("base") or 0) + (float((card.get("bonus") or {}).get(place, 0)) if prev_ok else 0.0)
 
 
-def card_discount(card: dict, st: dict, place: str, amount: float) -> tuple[float, str]:
-    """이 결제에서 받는 카드 할인·적립(원)과 설명 — 추가 할인은 이번 달 남은 한도까지만."""
-    base = amount * float(card.get("base") or 0) / 100
-    bonus = _bonus_won(card, place, amount) if st["prev_ok"] else 0.0
-    why = f"{card_rate(card, place, st['prev_ok']):g}%"
-    if bonus and st["cap_left"] is not None and bonus > st["cap_left"]:
-        bonus = st["cap_left"]
+def card_discount(card: dict, st: dict, place: str, amount: float, merchant: str = "") -> tuple[float, str]:
+    """이 결제의 카드 할인·적립(원)과 설명 — 추가 할인은 항목 한도·횟수, 이번 달 남은 통합 한도까지만."""
+    base_rate = float(card.get("base") or 0)
+    won, _, why = _best(card, place, merchant, amount, st["prev_amt"], st["by_rule"], st["cnt"])
+    if won and st["cap_left"] is not None and won > st["cap_left"]:
+        won = st["cap_left"]
         why += f" · 이번 달 남은 한도 {st['cap_left']:,.0f}원까지"
-    return base + bonus, why
+    parts = ([why] if won else []) + ([f"기본 {base_rate:g}%"] if base_rate else [])
+    return amount * base_rate / 100 + won, " + ".join(parts)
 
 
 def fill_value(card: dict, st: dict, amount: float) -> tuple[float, str]:
-    """이 결제가 다음 달 혜택에 보태는 몫(원). 정액 카드는 구간별 월 할인액 차이, 그 밖은 '한 달 혜택'을 실적 조건으로 나눔."""
-    caps = card.get("caps") or []
-    used = st["used"]
-    if card.get("fixed") and caps:
-        lower = [(need, c) for need, c in caps if used >= need]
+    """이 결제가 다음 달 혜택에 보태는 몫(원). 한도 구간이 있으면 다음 구간까지 채우는 비율, 없으면 '한 달 혜택' ÷ 실적 조건."""
+    caps, used, fixed = card.get("caps") or [], st["used"], bool(card.get("fixed"))
+    if caps and st["next_need"] is not None:
+        lower = [(n, c) for n, c in caps if used >= n]
         lo_need, lo_cap = lower[-1] if lower else (0.0, 0.0)
-        if st["next_need"] is None:
-            return 0.0, ""
-        span = st["next_need"] - lo_need
         x = min(amount, st["next_need"] - used)
-        return (st["next_cap"] - lo_cap) * x / span, f"다음 달 할인 {st['next_cap']:,.0f}원까지 {st['next_need'] - used:,.0f}원 남음"
-    if st["tier"] and card.get("benefit") and st["left"] > 0:
+        val = (st["next_cap"] - lo_cap) * (1.0 if fixed else USE_SHARE) * x / (st["next_need"] - lo_need)
+        why = (f"{st['next_need'] / MAN:,.0f}만 원 넘기면 다음 달 {'할인' if fixed else '한도'} {st['next_cap']:,.0f}원"
+               f" · {st['next_need'] - used:,.0f}원 남음" + ("" if fixed else " (절반 쓴다고 어림)"))
+        return val, why
+    if not caps and st["tier"] and card.get("benefit") and st["left"] > 0:
         return float(card["benefit"]) * min(amount, st["left"]) / st["tier"], f"이번 달 실적까지 {st['left']:,.0f}원 남음"
     return 0.0, ""
+
+
+def brand_words(state: dict) -> list[str]:
+    """가게 이름 칸 자동완성용: 내 카드 규칙에 나오는 가맹점 이름."""
+    out: list[str] = []
+    for c in state["cards"]:
+        for r in c.get("rules") or []:
+            out += [w for w in r.get("match") or [] if w not in out]
+    return out
 
 
 def _live_vouchers(state, kind, today):
@@ -426,7 +494,7 @@ def _live_vouchers(state, kind, today):
 
 
 # ---------------- 추천 ----------------
-def recommend(state: dict, place: str, amount: float, today: dt.date) -> dict:
+def recommend(state: dict, place: str, amount: float, today: dt.date, merchant: str = "") -> dict:
     p = state["profile"]
     salary, children = float(p.get("salary") or 0), int(p.get("children") or 0)
     t = marginal_rate(p) if salary else 0.0
@@ -449,7 +517,7 @@ def recommend(state: dict, place: str, amount: float, today: dt.date) -> dict:
     opts = []
     for c in state["cards"]:
         st = card_status(state, c, today)
-        disc, why = card_discount(c, st, place, amount)
+        disc, why = card_discount(c, st, place, amount, merchant)
         fill, fill_why = fill_value(c, st, amount)
         grp = group_of(place, c["kind"], salary)
         note = "" if st["prev_ok"] else "지난달 실적을 못 채워 이번 달 추가 할인이 없습니다"
@@ -473,7 +541,9 @@ def recommend(state: dict, place: str, amount: float, today: dt.date) -> dict:
     opts.append(option("현금·계좌이체 (현금영수증)", "cash", [
         ("공제로 돌아오는 세금", tax(group_of(place, "현금", salary), amount), "")]))
     opts.sort(key=lambda o: (-o["pct"], -o["value"]))
+    hint = bool(not merchant and any(r.get("match") for c in state["cards"] for r in c.get("rules") or []))
     return {"place": place, "place_name": PLACE.get(place, PLACE["기타"])[0], "amount": amount, "options": opts,
+            "merchant": merchant, "hint": hint,
             "rate": t, "advice": advice(proj, deduction(proj, salary, children) if salary else None, t)}
 
 
@@ -515,7 +585,11 @@ def benefit_of(state: dict, r: dict, today: dt.date) -> float:
     amt = float(r.get("amount") or 0)
     if kind == "c" and _card(state, rid):
         c = _card(state, rid)
-        return amt * card_rate(c, r.get("place"), card_status(state, c, today)["prev_ok"]) / 100   # 월 한도 전 어림
+        st = card_status(state, c, today)
+        base = amt * float(c.get("base") or 0) / 100
+        if r["id"] in st["per"]:                       # 이번 달 기록: 항목·통합 한도까지 반영한 값
+            return base + st["per"][r["id"]]
+        return base + _best(c, r.get("place"), r.get("memo", ""), amt, st["prev_amt"], {}, {})[0]   # 지난 기록: 한도 전 어림
     if kind == "v" and _voucher(state, rid):
         rate = {"온누리": "onnuri", "지역사랑": "local"}.get(_voucher(state, rid)["kind"])
         return amt * float(state["profile"].get(rate, 0)) / 100 if rate else 0.0

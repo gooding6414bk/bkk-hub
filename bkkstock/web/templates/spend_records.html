@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% from "_spend_macros.html" import won, record_form with context %}
+{% from "_spend_macros.html" import won, record_form, shop_list with context %}
 {% block title %}소비 기록{% endblock %}
 {% block content %}
 {% include "_spend_tabs.html" %}
 <section class="card">
   <div class="card-head"><h2>결제 기록하기</h2></div>
   {% if err %}<p class="err">{{ err }}</p>{% endif %}
-  {{ record_form(places, methods, today, place=q.place, amount=q.amount) }}
+  {{ record_form(places, methods, today, place=q.place, amount=q.amount, shop=q.shop) }}
   <p class="muted small">상품권으로 낸 기록은 그 상품권 잔액에서 빠지고, 기록을 지우면 돌아옵니다.</p>
 </section>
 <section class="card">

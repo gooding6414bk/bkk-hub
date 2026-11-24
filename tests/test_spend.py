@@ -135,3 +135,37 @@ def test_month_used_from_form_rolls_into_last_month():
     assert st["prev_amt"] == 798_110 and st["prev_ok"] and st["used"] == 0
     f2 = {"salary": "5000", "c0_id": str(card["id"]), "c0_name": "카드", "c0_kind": "체크", "c0_tier": "20", "c0_month_used": ""}
     assert sp.wallet_from_form(s, f2, dec)["cards"][0]["month"] == "2026-11"            # 비워 저장해도 지난달 값은 남는다
+
+
+def test_catalog_rules_match_shop_names_and_caps():
+    from bkkstock.analysis.cards import CATALOG, PRESET
+    assert all(c["checked"] and c["src"] for c in CATALOG)
+    s = state()
+    assert sp.import_presets(s, ["kb-nori2-play", "kb-nori-rf", "없는카드"], DAY) == 2
+    assert sp.import_presets(s, ["kb-nori2-play"], DAY) == 0                               # 이미 있으면 건너뜀
+    play, old = s["cards"]
+    play.update(month_used=500_000, month="2026-10")                                        # 10월 50만 → 11월 한도 3만
+    old.update(month_used=250_000, month="2026-10")                                         # 10월 25만 → 1만, 30만 조건 혜택 없음
+    r = sp.recommend(s, "외식", 15_000, DAY, "스타벅스 강남점")
+    by = {o["method"]: o for o in r["options"]}
+    assert by[f"c:{old['id']}"]["parts"][0][1] == pytest.approx(3_000)                     # 20% (건당 2만까지)
+    assert by[f"c:{play['id']}"]["parts"][0][1] == pytest.approx(1_500)                    # 10%, 항목 한도 3천 안
+    assert r["options"][0]["method"] == f"c:{old['id']}"
+    assert sp.recommend(s, "외식", 15_000, DAY)["hint"]                                    # 가게 이름이 없으면 안내
+    for _ in range(2):                                                                     # CGV 건당 4천 원은 월 2회까지
+        sp.add_record(s, {"date": "2026-11-05", "amount": "15000", "place": "문화", "memo": "CGV 왕십리", "method": f"c:{play['id']}"}, DAY)
+    st = sp.card_status(s, play, DAY)
+    assert st["got"] == pytest.approx(8_000) and st["cap_left"] == pytest.approx(22_000)
+    disc, _ = sp.card_discount(play, st, "문화", 15_000, "CGV")
+    assert disc == 0                                                                       # 3번째는 할인 없음
+    transit = sp.recommend(s, "교통", 10_000, DAY)
+    assert all(o["parts"][0][0] != "카드 할인·적립" for o in transit["options"] if o["method"] == f"c:{old['id']}")   # 25만 < 30만
+
+
+def test_fixed_telco_card_from_catalog_pushes_to_tier():
+    s = state()
+    sp.import_presets(s, ["kb-kt-superdc7"], DAY)
+    c = s["cards"][0]
+    r = sp.recommend(s, "마트", 100_000, DAY)
+    fill = dict((n, v) for n, v, _ in r["options"][0]["parts"])["실적 채우기"]
+    assert r["options"][0]["method"] == f"c:{c['id']}" and fill == pytest.approx(15_000 * 100_000 / 300_000)
