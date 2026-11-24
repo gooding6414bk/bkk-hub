@@ -220,3 +220,17 @@ def test_membership_perks_pick_the_bigger_carrier_and_kt_silver_cashback():
     assert sp.card_discount(c, st, "문화", 15_000, "메가박스")[0] == pytest.approx(6_000)
     s["profile"]["kt"] = "VIP"
     assert sp.card_discount(c, sp.card_status(s, c, DAY), "외식", 30_000, "파리바게뜨")[0] == pytest.approx(3_000)
+
+
+def test_point_perks_earn_and_use():
+    s = state()
+    s["profile"].update(skt="VIP", kt="")
+    s["points"] = [{"id": 1, "kind": "해피포인트", "balance": 3_200, "exp": "2027-01-10"},
+                   {"id": 2, "kind": "OK캐쉬백", "balance": 800, "exp": ""}]
+    perks = sp.perks_for(s, "외식", "파리바게뜨", 10_000)
+    kinds = {(k["program"], k["kind"]) for k in perks}
+    assert ("SKT 멤버십", "할인") in kinds and ("해피포인트", "적립") in kinds and ("해피포인트", "사용") in kinds
+    assert next(k for k in perks if k["kind"] == "사용")["won"] == 3_200 and "3,200점" in next(k for k in perks if k["kind"] == "사용")["text"]
+    assert not [k for k in sp.perks_for(s, "편의점", "GS25", 5_000) if k["kind"] == "사용"]   # OK캐쉬백 800점 < 1천 점
+    rows = sp.point_rows(s, DAY)
+    assert rows[0]["warn"] == ["소멸 47일 전"] and rows[1]["warn"] == []
