@@ -98,3 +98,40 @@ def test_wallet_form_parses_rows_and_drops_blank_or_deleted():
     assert len(s["cards"]) == 1 and s["cards"][0]["tier"] == 300_000 and s["cards"][0]["bonus"] == {"마트": 5, "교통": 10}
     assert [v["name"] for v in s["vouchers"]] == ["온누리"]
     assert sp.load(sp.dump(s)) == s and sp.load("not json") == sp.empty()
+
+
+def test_monthly_cap_limits_bonus_by_last_month_tier():
+    s = state()
+    s["cards"] = [{"id": 1, "name": "한도카드", "kind": "체크", "base": 0, "tier": 200_000, "benefit": 0,
+                   "bonus": {"편의점": 10}, "caps": [[200_000, 5_000], [400_000, 10_000]], "fixed": False,
+                   "prev_ok": True, "month_used": 450_000, "month": "2026-10"}]          # 10월에 앱 숫자로 45만 → 11월 한도 1만
+    st = sp.card_status(s, s["cards"][0], DAY)
+    assert st["prev_amt"] == 450_000 and st["cap"] == 10_000 and st["cap_left"] == 10_000
+    sp.add_record(s, {"date": "2026-11-10", "amount": "80000", "place": "편의점", "method": "c:1"}, DAY)   # 8천 받음
+    r = sp.recommend(s, "편의점", 50_000, DAY)
+    card = next(o for o in r["options"] if o["method"] == "c:1")
+    assert card["parts"][0][1] == pytest.approx(2_000) and "남은 한도" in card["parts"][0][2]
+
+
+def test_fixed_card_values_reaching_next_tier():
+    s = state()
+    s["cards"] = [{"id": 1, "name": "통신카드", "kind": "신용", "base": 0, "tier": 0, "benefit": 0, "bonus": {},
+                   "caps": [[300_000, 10_000], [700_000, 15_000]], "fixed": True, "prev_ok": True,
+                   "month_used": 250_000, "month": "2026-11"}]
+    st = sp.card_status(s, s["cards"][0], DAY)
+    assert st["used"] == 250_000 and st["next_need"] == 300_000 and st["cap_left"] is None
+    fill, why = sp.fill_value(s["cards"][0], st, 100_000)
+    assert fill == pytest.approx(10_000 * 50_000 / 300_000) and "다음 달 할인" in why     # 남은 5만만 쳐 준다
+
+
+def test_month_used_from_form_rolls_into_last_month():
+    s = state()
+    f = {"salary": "5000", "c0_id": "", "c0_name": "카드", "c0_kind": "체크", "c0_tier": "20", "c0_month_used": "798,110"}
+    s = sp.wallet_from_form(s, f, DAY)
+    card = s["cards"][0]
+    assert card["month_used"] == 798_110 and card["month"] == "2026-11"
+    dec = dt.date(2026, 12, 3)
+    st = sp.card_status(s, card, dec)
+    assert st["prev_amt"] == 798_110 and st["prev_ok"] and st["used"] == 0
+    f2 = {"salary": "5000", "c0_id": str(card["id"]), "c0_name": "카드", "c0_kind": "체크", "c0_tier": "20", "c0_month_used": ""}
+    assert sp.wallet_from_form(s, f2, dec)["cards"][0]["month"] == "2026-11"            # 비워 저장해도 지난달 값은 남는다

@@ -72,7 +72,10 @@
     <li><div class="opt-head"><span><span class="name">{{ c.name }}</span><span class="tag">{{ c.kind }}</span>{% if not c.prev_ok %} <span class="chip warn">지난달 미달</span>{% endif %}</span>
       <span class="num small">{% if c.tier %}{{ man(c.used) }} / {{ man(c.tier) }}{% else %}{{ man(c.used) }} · 실적 조건 없음{% endif %}</span></div>
       {% if c.tier %}{{ meter(c.pct, 'ok' if c.left == 0 else '') }}
-      <div class="small muted">{% if c.left %}다음 달 혜택까지 <b>{{ won(c.left) }}</b> 남음{% if c.benefit %} · 채우면 약 {{ won(c.benefit) }}{% endif %}{% else %}실적 채움 ✓{% endif %}</div>{% endif %}
+      <div class="small muted">{% if c.left %}다음 달 혜택까지 <b>{{ won(c.left) }}</b> 남음{% if c.benefit %} · 채우면 약 {{ won(c.benefit) }}{% endif %}{% else %}실적 채움 ✓{% endif %}
+        {% if c.next_need and c.next_need > c.tier %} · {{ man(c.next_need) }} 넘기면 다음 달 {{ '할인' if c.fixed else '한도' }} {{ won(c.next_cap) }}{% endif %}</div>{% endif %}
+      {% if c.cap is not none %}<div class="small muted">{% if c.fixed %}이번 달 받는 정액 할인 {{ won(c.cap) }}{% else %}이번 달 추가 할인 한도 {{ won(c.cap) }} 중 <b>{{ won(c.cap_left) }}</b> 남음{% endif %}
+        <span class="c3">({% if c.prev_amt is not none %}지난달 {{ man(c.prev_amt) }} 사용 기준{% else %}지난달 실적은 지갑 표시 기준{% endif %})</span></div>{% endif %}
     </li>
   {% endfor %}</ul>
   <p class="muted small">앱에 기록한 결제만 셉니다. 모자란 금액이 채웠을 때 혜택보다 크면 억지로 채우지 마세요.</p>

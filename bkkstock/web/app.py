@@ -460,7 +460,16 @@ def register_routes(app: Flask) -> None:
         if request.method == "POST":
             ctx().store.meta_set("spend_state", sp.dump(sp.wallet_from_form(state, request.form, now_kst().date())))
             return redirect(url_for("spend_home"))
-        return spend_page("spend_wallet.html", "wallet", sp, state, kinds=sp.VOUCHER_KINDS, bonus_text=sp.bonus_text)
+        from ..analysis.cards import CATALOG
+        return spend_page("spend_wallet.html", "wallet", sp, state, kinds=sp.VOUCHER_KINDS, bonus_text=sp.bonus_text,
+                          caps_text=sp.caps_text, catalog=CATALOG, this_month=now_kst().strftime("%Y-%m"))
+
+    @app.post("/spend/wallet/import")
+    def spend_wallet_import():
+        sp, state = spend_state()
+        if sp.import_presets(state, request.form.getlist("key"), now_kst().date()):
+            ctx().store.meta_set("spend_state", sp.dump(state))
+        return redirect(url_for("spend_wallet") + "#cards")
 
     @app.route("/spend/records", methods=["GET", "POST"])
     def spend_records():

@@ -3,6 +3,19 @@
 {% block content %}
 {% include "_spend_tabs.html" %}
 {% set p = s.profile %}
+{% set have = s.cards | map(attribute='preset') | list %}
+{% if catalog %}
+<form method="post" action="/spend/wallet/import" class="card spend-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="card-head"><h2>카드 목록에서 넣기</h2><span class="muted small">상품설명서 기준 · 확인일 표시</span></div>
+  {% for c in catalog %}
+  <label class="chk"><input type="checkbox" name="key" value="{{ c.key }}" {{ 'checked disabled' if c.key in have }}>
+    <span><b>{{ c.name }}</b> <span class="tag">{{ c.kind }}</span>{% if c.key in have %} <span class="chip ok">지갑에 있음</span>{% endif %}
+    <span class="muted small" style="display:block">{{ c.summary }} · 확인 {{ c.checked }}</span></span></label>
+  {% endfor %}
+  <button type="submit">고른 카드 지갑에 넣기</button>
+</form>
+{% endif %}
 <form method="post" class="spend-form" autocomplete="off">
 <input type="hidden" name="csrf" value="{{ csrf }}">
 <section class="card">
@@ -27,7 +40,8 @@
 <section class="card" id="cards">
   <div class="card-head"><h2>카드</h2></div>
   <p class="muted small">장소별 할인은 '마트 5, 온라인 3, 교통 10'처럼 씁니다. 장소 이름: {% for k, name, g, vs in places %}{{ k }}{{ ', ' if not loop.last }}{% endfor %}.
-    '지난달 실적 채움'은 지난달 기록이 없을 때만 씁니다.</p>
+    월 할인 한도는 '전월 실적 한도'를 짝지어 '20만 1만, 40만 2만'처럼 씁니다(정액 카드는 한도 자리에 월 할인액).
+    <b>이번 달 이용액</b>에 카드 앱 숫자를 넣으면 결제를 일일이 기록하지 않아도 실적이 잡히고, 다음 달엔 '지난달 실적'으로 쓰입니다.</p>
   {% for c in s.cards + [{}, {}] %}{% set i = loop.index0 %}
   <fieldset class="box">
     <input type="hidden" name="c{{ i }}_id" value="{{ c.id or '' }}">
@@ -38,8 +52,13 @@
       <label>전월 실적 조건 (만 원) <input name="c{{ i }}_tier" inputmode="numeric" value="{{ '%.0f' % (c.tier / 10000) if c.tier else '' }}" placeholder="없으면 비우기"></label>
       <label>실적 채우면 한 달 혜택 (원, 어림) <input name="c{{ i }}_benefit" inputmode="numeric" value="{{ '%.0f' % c.benefit if c.benefit else '' }}"></label>
       <label>장소별 추가 할인 (%) <input name="c{{ i }}_bonus" value="{{ bonus_text(c.bonus) if c.bonus else '' }}" placeholder="예: 마트 5, 교통 10"></label>
+      <label>월 할인 한도 (전월 실적 한도) <input name="c{{ i }}_caps" value="{{ caps_text(c.caps) if c.caps else '' }}" placeholder="예: 20만 1만, 40만 2만"></label>
+      <label>이번 달 이용액 (원, 카드 앱 숫자) <input name="c{{ i }}_month_used" inputmode="numeric" value="{{ '%.0f' % c.month_used if c.month_used is not none and c.month == this_month else '' }}" placeholder="예: 798110"></label>
+      {% if not c and catalog %}<label>또는 목록에서 고르기 <select name="c{{ i }}_preset"><option value="">—</option>{% for k in catalog %}<option value="{{ k.key }}">{{ k.name }}</option>{% endfor %}</select></label>{% endif %}
     </div>
-    <label class="chk"><input type="checkbox" name="c{{ i }}_prev" {{ 'checked' if c.prev_ok or not c }}> 지난달 실적 채움</label>
+    {% if c.note %}<p class="muted small">📄 {{ c.note }}</p>{% endif %}
+    <label class="chk"><input type="checkbox" name="c{{ i }}_fixed" {{ 'checked' if c.fixed }}> 정액 혜택 카드 (통신비 할인처럼 실적만 채우면 정해진 금액 할인)</label>
+    <label class="chk"><input type="checkbox" name="c{{ i }}_prev" {{ 'checked' if c.prev_ok or not c }}> 지난달 실적 채움 (지난달 이용액을 모를 때만 씀)</label>
     {% if c %}<label class="chk"><input type="checkbox" name="c{{ i }}_del"> 이 카드 지우기</label>{% endif %}
   </fieldset>
   {% endfor %}
