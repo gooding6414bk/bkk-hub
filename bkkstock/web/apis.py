@@ -63,8 +63,14 @@ APIS = [
         "notes": "키가 없어도 보드는 그대로 돌고, 지표 화면의 한국 금리·환율 칸만 비어 있습니다.",
     },
     {
+        "id": "fred", "name": "미국 연준 경제자료 FRED (키 불필요)", "status_ids": ["fred"], "public": True,
+        "purpose": "📊 지표의 미국 기준금리·미국채 2년·장단기 금리차·소비자물가·근원물가·실업률.",
+        "keys": [], "site": "https://fred.stlouisfed.org",
+        "steps": ["키가 필요 없습니다 (FRED 그래프의 CSV 내려받기 주소). 막히면 미국 칸만 빕니다."],
+    },
+    {
         "id": "overseas", "name": "해외 시세 (야후 파이낸스, 키 불필요)", "status_ids": ["overseas", "overseas_macro"], "public": True,
-        "purpose": "밤사이 미국 상장 한국 ETF(EWY)·필라델피아 반도체·나스닥·원/달러 → 내일 예측가와 시장 개요. 미국채 10년·VIX·달러인덱스 → 📊 지표.",
+        "purpose": "밤사이 미국 상장 한국 ETF(EWY)·필라델피아 반도체·나스닥·원/달러 → 내일 예측가와 시장 개요. 미국채 10년·VIX·달러인덱스·S&P 500·나스닥 → 📊 지표.",
         "keys": [], "site": "https://finance.yahoo.com/quote/EWY",
         "steps": ["키가 필요 없습니다. 비공식 경로라 막히면 내일 예측가의 '해외 반영' 부분만 빠지고 변동 범위는 그대로 나옵니다."],
     },
@@ -101,6 +107,8 @@ def run_test(ctx, api_id: str) -> str:
         return ctx.tg.test()
     if api_id == "overseas":
         return ctx.overseas.test()
+    if api_id == "fred":
+        return ctx.fred.test()
     if api_id == "ecos":
         return ctx.ecos.test()
     raise KeyError(api_id)

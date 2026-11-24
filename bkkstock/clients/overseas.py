@@ -25,6 +25,8 @@ MACRO_SYMBOLS = {
     "^TNX": "미국채 10년",
     "^VIX": "VIX (미국 변동성)",
     "DX-Y.NYB": "달러인덱스",
+    "^GSPC": "S&P 500",
+    "^IXIC": "나스닥",
 }
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
 

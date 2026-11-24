@@ -11,6 +11,7 @@ from ..clients.base import ApiError, NotConfigured
 from ..clients.dart import DartClient
 from ..clients.datagokr import DataGoKrClient
 from ..clients.ecos import EcosClient
+from ..clients.fred import FredClient
 from ..clients.kis import KisClient
 from ..clients.krx import KrxClient
 from ..clients.news import NewsClient
@@ -35,6 +36,7 @@ class Ctx:
     datagokr: DataGoKrClient
     overseas: OverseasClient
     ecos: EcosClient
+    fred: FredClient
 
 
 def make_ctx(settings: Settings | None = None) -> Ctx:
@@ -42,7 +44,7 @@ def make_ctx(settings: Settings | None = None) -> Ctx:
     store = Store(s.data_dir)
     return Ctx(s, store, KisClient(s, store), KrxClient(s, store), DartClient(s, store),
                NewsClient(s, store), Telegram(s, store), DataGoKrClient(s, store), OverseasClient(s, store),
-               EcosClient(s, store))
+               EcosClient(s, store), FredClient(s, store))
 
 
 class AlreadyRunning(Exception):
