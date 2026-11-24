@@ -463,7 +463,8 @@ def register_routes(app: Flask) -> None:
             return redirect(url_for("spend_home"))
         from ..analysis.cards import CATALOG
         return spend_page("spend_wallet.html", "wallet", sp, state, kinds=sp.VOUCHER_KINDS, bonus_text=sp.bonus_text,
-                          caps_text=sp.caps_text, catalog=CATALOG, this_month=now_kst().strftime("%Y-%m"))
+                          caps_text=sp.caps_text, catalog=CATALOG, this_month=now_kst().strftime("%Y-%m"),
+                          skt_grades=sp.SKT_GRADES)
 
     @app.post("/spend/wallet/import")
     def spend_wallet_import():

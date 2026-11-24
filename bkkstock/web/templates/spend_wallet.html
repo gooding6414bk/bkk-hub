@@ -27,7 +27,9 @@
     <label>한계세율 (%, 모르면 비우기) <input name="rate" inputmode="decimal" value="{{ p.rate or '' }}" placeholder="비우면 어림"></label>
     <label>디지털 온누리 할인율 (%) <input name="onnuri" inputmode="decimal" value="{{ p.onnuri }}"></label>
     <label>지역사랑상품권 할인율 (%) <input name="local" inputmode="decimal" value="{{ p.local }}"></label>
+    <label>SKT 멤버십 등급 <select name="skt"><option value="">없음</option>{% for g in skt_grades %}<option {{ 'selected' if p.skt == g }}>{{ g }}</option>{% endfor %}</select></label>
   </div>
+  <label class="chk"><input type="checkbox" name="kt" {{ 'checked' if p.kt is not defined or p.kt }}> KT 요금(휴대폰·인터넷)과 KT 멤버십이 있음 — 빼면 KT 요금 할인·KT 멤버십 연계 카드 혜택을 계산하지 않습니다</label>
   <h3>앱 쓰기 전 올해 사용액 (만 원)</h3>
   <p class="muted small">홈택스 '연말정산 미리보기'의 1~9월 숫자 + 그 뒤 쓴 돈. 앱에 기록한 결제는 빼고 넣으세요.</p>
   <div class="grid-f">

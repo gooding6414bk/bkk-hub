@@ -182,3 +182,23 @@ def test_tiered_rule_rate_and_cap():
     c.update(month_used=250_000)                                                            # 20만 구간: 5%, 한도 5천
     st = sp.card_status(s, c, DAY)
     assert sp.card_discount(c, st, "고정", 80_000, "KT")[0] == pytest.approx(4_000)
+
+
+def test_skt_grade_and_kt_conditions():
+    s = state()
+    sp.import_presets(s, ["hana-sk-family", "kb-kt-superdc7"], DAY)
+    sk, dc7 = s["cards"]
+    pizza = lambda: next(o for o in sp.recommend(s, "외식", 40_000, DAY, "도미노피자")["options"] if o["method"] == f"c:{sk['id']}")
+    assert pizza()["parts"][0][1] == pytest.approx(40_000 * .0027)                       # SKT 멤버십 없음 → 기본 적립만
+    s["profile"]["skt"] = "VIP"
+    assert pizza()["parts"][0][1] == pytest.approx(8_000 + 40_000 * .0027)               # VIP: 카드 20% 더
+    for d in ("2026-11-02", "2026-11-09", "2026-11-16"):                                 # 미스터피자 45% 세 번 → 외식 통합 3만 원
+        sp.add_record(s, {"date": d, "amount": "40000", "place": "외식", "memo": "미스터피자", "method": f"c:{sk['id']}"}, DAY)
+    st = sp.card_status(s, sk, DAY)
+    assert st["got"] == pytest.approx(30_000) and sp.card_discount(sk, st, "외식", 40_000, "도미노")[0] == pytest.approx(108)
+    assert sp.card_status(s, dc7, DAY)["fixed_amt"] == 15_000
+    s["profile"]["kt"] = False                                                            # KT 요금이 없으면 DC7 혜택 없음
+    assert sp.card_status(s, dc7, DAY)["fixed_amt"] is None
+    assert sp.fill_value(dc7, sp.card_status(s, dc7, DAY), 100_000)[0] == 0
+    form = {"salary": "5000", "skt": "VIP"}                                               # KT 칸을 끄고 저장
+    assert sp.wallet_from_form(s, form, DAY)["profile"]["kt"] is False and s["profile"]["skt"] == "VIP"
