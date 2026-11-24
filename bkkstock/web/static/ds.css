@@ -262,8 +262,8 @@ details.fold > summary, details.sub-fold > summary { min-height: 44px; display: 
 .risk { color: inherit; }
 .risk:hover, .srow:hover { text-decoration: none; }
 a.srow { color: inherit; }
-.ktabs { position: sticky; top: 52px; z-index: 12; }
-@media (min-width: 1024px) { .ktabs { top: 64px; } .sec-chips { top: 64px !important; } }
+.ktabs { position: static; }   /* 붙여 두면 휴대폰에서 내용을 가림 */
+@media (min-width: 1024px) { .sec-chips { top: 64px !important; } }
 .appbar .icon-btn { color: var(--accent); }
 .sheet .opt { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--fg); font: inherit; font-weight: 500; text-align: left; cursor: pointer; }
 .sheet .opt.on { color: var(--accent); font-weight: 700; }
@@ -285,3 +285,24 @@ a.srow { color: inherit; }
 .pov p { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); line-height: 1.6; font-size: var(--t-sm); }
 .pov p.con { background: var(--warn-bg); }
 .pov p.mine { background: var(--accent-weak); }
+
+/* 규제 지도 */
+.regmap-wrap { margin: 10px 0 6px; border-radius: var(--r-md); background: var(--surface-2); overflow: hidden; }
+.regmap-wrap svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+.regmap .rz { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.regmap .rz.reg-both { fill: var(--danger-bg); stroke: var(--danger); }
+.regmap .rz.reg-adj { fill: var(--warn-bg); stroke: var(--warn); }
+.regmap .rz.reg-land { fill: var(--accent-weak); stroke: var(--accent); }
+.regmap .rz.reg-partial { fill: url(#reg-partial-hatch); stroke: var(--danger); }
+.regmap .hatch-bg { fill: var(--surface); } .regmap .hatch-line { stroke: var(--danger); stroke-width: 2; }
+.regmap .sido-line { fill: none; stroke: var(--fg-2); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.regmap .lbl { fill: var(--fg-2); font-size: 9px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+.regmap .legend { display: none; }                      /* 범례는 HTML 로 (휴대폰에서 읽히게) */
+.regmap .rz:hover { stroke-width: 2.5; }
+.map-seg { margin-top: 4px; }
+.map-seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0; }
+.map-legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; background: var(--surface); border: 1px solid var(--line-strong); }
+.map-legend .sw.reg-both { background: var(--danger-bg); border-color: var(--danger); }
+.map-legend .sw.reg-partial { background: repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--danger) 3px 4px); border-color: var(--danger); }
+.regmap:not(.zoom-seoul) .labels { display: none; }   /* 전체 보기에서는 글자가 너무 작아 숨김 */

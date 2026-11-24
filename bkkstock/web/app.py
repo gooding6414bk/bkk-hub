@@ -40,6 +40,19 @@ from .apis import BY_ID, run_test
 LOGO_COLORS = ["#3182f6", "#0c8a4e", "#e8913a", "#8b5cf6", "#e0507a", "#0f9fb8", "#6b7684", "#b8860b"]
 
 
+_REGMAP: dict = {}
+
+
+def _regmap_svg() -> str:
+    """규제지역 지도 SVG (정적 파일, 우리가 만든 것). CSS 로 색을 주려고 화면에 직접 넣는다."""
+    if "svg" not in _REGMAP:
+        try:
+            _REGMAP["svg"] = (HERE / "static" / "regmap.svg").read_text(encoding="utf-8")
+        except OSError:
+            _REGMAP["svg"] = ""
+    return _REGMAP["svg"]
+
+
 def logo_color(code) -> str:
     return LOGO_COLORS[sum(ord(c) for c in str(code)) % len(LOGO_COLORS)]
 
@@ -440,11 +453,14 @@ def register_routes(app: Flask) -> None:
             plan = movemod.Plan.from_dict(_json.loads(ctx().store.meta_get("move_plan") or "{}"))
         except ValueError:
             plan = movemod.Plan()
+        from ..analysis import regzones
         tgt = plan.target_price or (plan.sell_price + 9 if plan.sell_price else 0)
         return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate", p=plan,
                                r=movemod.calc(plan), wait=movemod.wait_effect(plan), ht=movemod.holding_tax_note(plan),
                                sc=movemod.scenarios(plan), tgt=tgt,
-                               jc=movemod.holding_tax_owner_compare(plan, tgt * .7) if tgt else None)
+                               jc=movemod.holding_tax_owner_compare(plan, tgt * .7) if tgt else None,
+                               zones=regzones.ZONES, zones_extra=regzones.SEOUL_EXTRA_LAND, zones_checked=regzones.CHECKED,
+                               regmap=_regmap_svg())
 
     @app.get("/ops")
     def ops():

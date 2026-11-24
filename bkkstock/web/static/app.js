@@ -108,6 +108,20 @@
     if (new URLSearchParams(location.search).get("edit") === "1") editHome(editBtn);
   }
 
+
+  // ---------- 규제 지도: 서울만 크게 / 서울+경기 ----------
+  const rmap = document.querySelector(".regmap-wrap svg");
+  if (rmap) {
+    const full = rmap.getAttribute("viewBox"), seoul = rmap.dataset.seoulViewbox || full;
+    const setView = (v) => {
+      rmap.setAttribute("viewBox", v === "seoul" ? seoul : full);
+      rmap.classList.toggle("zoom-seoul", v === "seoul");
+      document.querySelectorAll("[data-map-view]").forEach((b) => b.classList.toggle("on", b.dataset.mapView === v));
+    };
+    document.querySelectorAll("[data-map-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.mapView)));
+    setView(window.innerWidth < 900 ? "seoul" : "all");
+  }
+
   // ---------- 종목 검색·추가 ----------
   const form = $("#add-form");
   if (form) {

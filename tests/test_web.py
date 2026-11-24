@@ -481,3 +481,16 @@ def test_realestate_myhome_explained_from_server_data(client):
         assert word in page, word
     mv = c.get("/knowledge/realestate/move").get_data(as_text=True)
     assert "갈 집 가격별로 보면" in mv and "기다리면" in mv
+
+
+def test_realestate_regulation_map_and_list(client):
+    from bkkstock.analysis import regzones
+    c, _ = client
+    login(c)
+    page = c.get("/knowledge/realestate").get_data(as_text=True)
+    assert 'id="regmap"' in page and "<svg" in page and "reg-both" in page and "data-seoul-viewbox" in page
+    assert "서울 25개 구 전체" in page and "2026-12-31" in page and "연장 여부" in page
+    assert sum(1 for z in regzones.ZONES if z.sido == "서울") == 25
+    assert regzones.map_class("성남시 분당구") == "reg-both" and regzones.map_class("화성시") == "reg-partial"
+    assert regzones.map_class("가평군") == ""
+    assert "<script" not in open("bkkstock/web/static/regmap.svg", encoding="utf-8").read()

@@ -103,11 +103,37 @@
 </section>
 {% endif %}
 
+<section class="card" id="regmap">
+  <div class="sec-head"><h2>🗺 규제지역 · 토지거래허가구역</h2><span class="small c3">확인 {{ zones_checked }}</span></div>
+  {% set n_seoul = zones | selectattr('sido', 'equalto', '서울') | list | length %}
+  {% set n_gg = zones | selectattr('sido', 'equalto', '경기') | list | length %}
+  <p class="small">지금 <b>서울 {{ n_seoul }}개 구 전체</b>와 <b>경기 {{ n_gg }}곳</b>이 투기과열지구·조정대상지역이면서 토지거래허가구역입니다(세 겹 규제).</p>
+  {% if regmap %}
+  <div class="seg map-seg" role="group" aria-label="지도 범위"><button type="button" data-map-view="seoul">서울만 크게</button><button type="button" data-map-view="all">서울 + 경기</button></div>
+  <div class="regmap-wrap">{{ regmap | safe }}</div>
+  <div class="map-legend small"><span><i class="sw reg-both"></i>규제지역 + 토지거래허가</span><span><i class="sw reg-partial"></i>시 일부만 (화성시는 동탄구만)</span><span><i class="sw"></i>지정 없음</span></div>
+  <p class="cap c3">지도: 통계청(KOSTAT) 2013 행정구역 경계(southkorea-maps 가공). 2026년에 새로 생긴 구는 원본에 없어 상위 시로 표시합니다. PC에서는 구역에 마우스를 올리면 이름이 나옵니다.</p>
+  {% endif %}
+  <div class="pov">
+    <p><b>이 지도로 무엇을 보나</b>: 갈 집이 색칠된 곳이면 ① 사려면 구청 허가(1주택자는 지금 집 처분 확약) ② 사고 나서 <b>2년 직접 거주</b> ③ 대출 LTV 40%·집값 구간 한도 ④ 조정지역이라 다주택 중과·취득세 중과가 모두 붙습니다. 지금 수도권 상급지는 사실상 전부 색칠돼 있습니다.</p>
+    <p class="con"><b>반대로 보면 — 만료일이 변수</b>: 서울 전역과 경기 12곳의 토지거래허가는 <b>2026-12-31에 끝나고, 연장 여부는 아직 발표 전</b>입니다. 풀리면 실거주 의무가 사라져 상급지 수요(전세 끼고 사기)가 다시 늘 수 있고, 연장되면 지금 규칙이 1년 더 갑니다. 연말 발표를 보고 갈아타기 시기를 정하는 것이 맞습니다.</p>
+  </div>
+  <details class="sub-fold"><summary>전체 목록 ({{ zones | length }}곳)</summary>
+    <div class="tbl-wrap"><table class="dtable">
+      <thead><tr><th>지역</th><th>규제지역 지정</th><th>토지거래허가</th><th>허가 대상</th></tr></thead>
+      <tbody>{% for z in zones %}<tr><td><b>{{ z.sido }} {{ z.name }}</b></td><td>{{ z.adj_since or '기존 유지' }}</td><td>{{ z.land_since }} ~ {{ z.land_until }}</td><td style="text-align:left;white-space:normal">{{ z.land_scope }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% for name, until, note, src in zones_extra %}<p class="small c3">서울시 별도 토지거래허가: {{ name }} — {{ until }}까지 ({{ note }}) · <a href="{{ src }}" target="_blank" rel="noopener" class="t-link">출처</a></p>{% endfor %}
+    <p class="muted small src">출처: <a href="https://www.korea.kr/briefing/policyBriefingView.do?newsId=156722073" target="_blank" rel="noopener">정책브리핑 10·15</a> · <a href="https://www.korea.kr/news/policyNewsView.do?newsId=148967354" target="_blank" rel="noopener">2026-06-30 추가 지정</a> · <a href="https://gris.gg.go.kr/gnPlan/selectLandTransactionZone.do" target="_blank" rel="noopener">경기도 토지거래허가구역 현황</a> · 지정 여부 최종 확인은 <a href="https://www.eum.go.kr" target="_blank" rel="noopener">토지이음</a></p>
+  </details>
+</section>
+
 <details class="card fold" id="now">
   <summary><b>지금 상황 한눈에 (2026-11)</b></summary>
   <ul class="small">
     <li><b>규제지역</b>: 서울 25개 구 전체 + 경기 12곳(2025-10-16, 10·15 대책)이 투기과열지구·조정대상지역·토지거래허가구역으로 묶임.
-      2026-07-01 경기 화성 동탄구·용인 기흥구·구리시가 추가돼 경기 15곳 (이 세 곳 토지거래허가는 경기도 지정, 7-05~2027-12-31 아파트만).</li>
+      2026-07-01 경기 화성 동탄구·용인 기흥구·구리시가 추가돼 경기 15곳 (이 세 곳 토지거래허가는 경기도 지정, 7-05~2027-12-31 아파트만).
+      서울 전역·경기 12곳 토지거래허가는 <b>2026-12-31 만료, 연장 여부 미정</b> — <a href="#regmap" class="t-link">지도·목록</a></li>
     <li><b>대출</b>: 수도권·규제지역 주담대 한도는 집값 15억 이하 6억 · 25억 이하 4억 · 25억 초과 2억, 규제지역 LTV 40%.</li>
     <li><b>양도세</b>: 다주택자 중과 유예가 <b>2026-05-09로 끝남</b> — 5월 10일 양도분부터 조정대상지역 주택은 2주택 +20%p, 3주택 +30%p.</li>
     <li><b>보유세</b>: 2026 세제개편 정부안(종부세 실거주 1주택 공제 14억, 공정시장가액비율 인상, 장기보유특별공제 거주 중심 개편)이 국회 심의 중. 확정 전.</li>
