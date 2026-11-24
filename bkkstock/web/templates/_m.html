@@ -43,3 +43,17 @@
 {%- if l.live_error %}<br><span class="t-warn">현재가 조회 오류: {{ l.live_error }}</span>{% endif %}
 </p>
 {%- endmacro %}
+
+{#- 종목 한 줄 (홈·내 종목 공통, 2026-11 디자인 v2) -#}
+{% macro srow(w, show_pnl=True) -%}
+<a class="srow {{ 'blocked' if w.blocked }}" href="/stocks/{{ w.code }}">
+  <span class="logo" style="background:{{ w.code | logo }}" aria-hidden="true">{{ (w.name or w.code)[:1] }}</span>
+  <div style="min-width:0"><div class="nm">{{ w.name or w.code }}</div>
+    <div class="meta"><span class="chip {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span>{% if w.blocked %}<span class="chip block">⛔ 매수 금지</span>{% endif %}{{ flags(w.flags | rejectattr('kind', 'equalto', '경주마') | list if w.blocked else w.flags, 2) }}</div></div>
+  <div class="rt"><div class="price num">{{ w.close | num }}{% if w.close is not none %}원{% endif %}</div>
+    <div class="chg num">{{ chg(w.change_pct) }}{% if show_pnl and w.pnl is not none %} <span class="c3">·</span> {{ won(w.pnl) }}{% endif %}</div></div>
+</a>
+{%- endmacro %}
+{% macro sheet_btn(id, label, opts, cur, key) -%}
+<button class="icon-btn" type="button" data-sheet="{{ id }}" data-key="{{ key }}" data-opts='{{ opts | tojson }}' data-cur="{{ cur }}" aria-haspopup="dialog">{{ label }} ▾</button>
+{%- endmacro %}

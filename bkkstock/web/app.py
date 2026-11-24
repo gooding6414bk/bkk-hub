@@ -34,7 +34,14 @@ from ..jobs.watchdog import health
 from ..store import normalize_code
 from ..timeutil import iso_kst
 from . import data
+from . import prefs as prefsmod
 from .apis import BY_ID, run_test
+
+LOGO_COLORS = ["#3182f6", "#0c8a4e", "#e8913a", "#8b5cf6", "#e0507a", "#0f9fb8", "#6b7684", "#b8860b"]
+
+
+def logo_color(code) -> str:
+    return LOGO_COLORS[sum(ord(c) for c in str(code)) % len(LOGO_COLORS)]
 
 HERE = Path(__file__).parent
 REPO = HERE.parents[1]
@@ -220,7 +227,7 @@ def create_app() -> Flask:
     app.json.ensure_ascii = False
     app.session_interface = HubSession()
     # 프록시 헤더는 waitress(trusted_proxy=127.0.0.1)가 처리한다. 여기서 또 ProxyFix를 걸지 않는다.
-    app.jinja_env.filters.update(num=fmt_num, pct=fmt_pct, eok=fmt_eok, bytes=fmt_bytes, ts=short_ts)
+    app.jinja_env.filters.update(num=fmt_num, pct=fmt_pct, eok=fmt_eok, bytes=fmt_bytes, ts=short_ts, logo=logo_color)
     app.jinja_env.globals.update(version=__version__)
     app.config["HAS_GIBALHAE"] = load_gibalhae(app)
 
@@ -229,9 +236,15 @@ def create_app() -> Flask:
         tok = session.get("csrf") or secrets.token_urlsafe(24)
         session.setdefault("csrf", tok)
         nav = "gibalhae" if request.path.startswith(("/gibalhae", "/media")) else ""
+        badge, status = ("", "")
+        if session.get("auth"):
+            try:
+                badge, status = data.nav_badge(ctx())
+            except Exception:  # noqa: BLE001 — 메뉴 배지 때문에 화면이 깨지지 않게
+                pass
         return {"csrf": tok, "demo": ctx().settings.demo, "csp_nonce": getattr(g, "csp_nonce", ""),
                 "has_gibalhae": app.config["HAS_GIBALHAE"], "user": getattr(g, "user", None), "nav": nav,
-                "alerts_off": not ctx().tg.configured}
+                "alerts_off": not ctx().tg.configured, "nav_badge": badge, "nav_status": status}
 
     @app.before_request
     def gate():
@@ -349,13 +362,35 @@ def register_routes(app: Flask) -> None:
     # ---------- 화면 ----------
     @app.get("/")
     def index():
-        return page("dashboard.html", d=data.dashboard(ctx()))   # 영상 콘텐츠 요약은 메인에 두지 않는다(🎬 화면에서만)
+        p = prefsmod.load(ctx().store)
+        d = data.dashboard(ctx())
+        d["watch"] = prefsmod.sort_watch(d["watch"], p["watch"]["sort"])
+        return page("dashboard.html", d=d, layout=prefsmod.home_layout(p), prefs=p,
+                    sorts=prefsmod.WATCH_SORTS, views=prefsmod.WATCH_VIEWS)
+
+    @app.get("/settings")
+    def settings_page():
+        return render_template("settings.html", nav="settings", s=data.settings_summary(ctx()))
+
+    @app.get("/indicators")
+    def indicators_page():
+        return render_template("knowledge_indicators.html", nav="indicators", ktab="", v=data.indicators(ctx()))
+
+    @app.get("/api/prefs")
+    def api_prefs_get():
+        return jsonify(prefsmod.load(ctx().store))
+
+    @app.put("/api/prefs")
+    def api_prefs_put():
+        return jsonify({"ok": True, "prefs": prefsmod.save(ctx().store, request.get_json(silent=True) or {})})   # 영상 콘텐츠 요약은 메인에 두지 않는다(🎬 화면에서만)
 
     @app.get("/stocks")
     def stocks():
         live: dict = {}
-        rows = data.watch_rows(ctx(), live)
-        return page("stocks.html", rows=rows, day=data.ref_day(ctx()), live=live, stab="mine")
+        p = prefsmod.load(ctx().store)
+        rows = prefsmod.sort_watch(data.watch_rows(ctx(), live), p["watch"]["sort"])
+        return page("stocks.html", rows=rows, day=data.ref_day(ctx()), live=live, stab="mine", prefs=p,
+                    sorts=prefsmod.WATCH_SORTS, views=prefsmod.WATCH_VIEWS)
 
     @app.get("/stocks/calendar")
     def stocks_calendar():
@@ -379,7 +414,7 @@ def register_routes(app: Flask) -> None:
 
     @app.get("/knowledge/indicators")
     def knowledge_indicators():
-        return render_template("knowledge_indicators.html", nav="knowledge", ktab="indicators", v=data.indicators(ctx()))
+        return render_template("knowledge_indicators.html", nav="indicators", ktab="", v=data.indicators(ctx()))
 
     @app.route("/knowledge/realestate/move", methods=["GET", "POST"])
     def knowledge_move():

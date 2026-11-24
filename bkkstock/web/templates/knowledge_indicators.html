@@ -9,11 +9,11 @@
 {%- else %}{{ m.chg(c.chg) }}{% endif -%}
 {%- endmacro %}
 {% block content %}
-{% include "_knowledge_tabs.html" %}
+{% if ktab %}{% include "_knowledge_tabs.html" %}{% endif %}
 <section class="card">
   <div class="card-head"><h2>📊 지표</h2><span class="muted small">하루 1번 · 실시간 아님</span></div>
   <p class="small">한국·미국 금리, 미국 경제·주가, 환율, 위험, 물가를 한눈에 봅니다. 변화는 <b>1개월 전 대비</b>이고, 막대는 <b>지금 값이 지난 1년 중 어디쯤</b>인지입니다(왼쪽 = 1년 최저, 오른쪽 = 최고).</p>
-  <p class="muted small">지표로 오를지 내릴지는 맞히기 어렵습니다(연구·실측 모두). 사고팔 신호가 아니라 '지금 바깥 날씨'로만 보세요. <a href="/knowledge#econ">지표 읽는 법</a></p>
+  <p class="muted small">지표로 오를지 내릴지는 맞히기 어렵습니다(연구·실측 모두). 사고팔 신호가 아니라 '지금 바깥 날씨'로만 보세요. <a href="/knowledge#econ" class="t-link">지표 읽는 법</a></p>
   {% if not v.ecos_key %}<p class="warnbox small">한국 금리·환율·물가는 한국은행 ECOS 키가 있어야 나옵니다. <a href="/apis" class="pill">키 넣기</a></p>{% endif %}
 </section>
 

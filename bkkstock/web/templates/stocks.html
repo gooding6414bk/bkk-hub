@@ -1,33 +1,46 @@
 {% extends "base.html" %}{% import "_m.html" as m %}
-{% block title %}주식 관리{% endblock %}
+{% block title %}주식{% endblock %}
 {% block content %}
 {% include "_stock_tabs.html" %}
-<section class="card">
-  <div class="card-head"><h2>보유·관심 종목</h2><span class="muted small">기준일 {{ day or '–' }}</span></div>
+<section class="card flush">
+  <div class="sec-head"><h2>내 종목 <span class="c3 small">{{ rows | length }}</span></h2>
+    <span>{{ m.sheet_btn('watch-sort', sorts[prefs.watch.sort], sorts, prefs.watch.sort, 'watch.sort') }}{{ m.sheet_btn('watch-view', views[prefs.watch.view], views, prefs.watch.view, 'watch.view') }}</span></div>
   {% if rows %}
-  {{ m.live_note(live) }}
-  <div class="tbl-wrap"><table class="tbl cards compact-cards">
-    <thead><tr><th>종목</th><th class="r">{{ '현재가' if live.live_at else '종가' }}</th><th class="r">어제보다</th><th class="r">평가손익</th><th class="r">20일</th><th>참고 점수</th><th>위험</th><th>최근 공시</th><th></th></tr></thead>
+  <div style="padding:0 20px">{{ m.live_note(live) }}</div>
+  <div class="row-list only-m {{ 'compact' if prefs.watch.view == 'compact' }}">{% for w in rows %}{{ m.srow(w) }}{% endfor %}</div>
+  <div class="only-pc" style="padding:0 20px 8px"><div class="tbl-wrap"><table class="dtable">
+    <thead><tr><th>종목</th><th>{{ '현재가' if live.live_at else '종가' }}</th><th>어제보다</th><th>평가손익</th><th>수익률</th><th>20일</th><th>참고 점수</th><th>위험</th><th>최근 공시</th></tr></thead>
     <tbody>
     {% for w in rows %}
-    <tr class="{{ 'row-block' if w.blocked }}">
-      <td class="full"><a href="/stocks/{{ w.code }}" class="name">{{ w.name or w.code }}</a> <span class="tag {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span><div class="muted small">{{ w.code }}{% if w.memo %} · {{ w.memo }}{% elif w.kind == '보유' %} · <span class="t-warn">산 이유를 메모해 두세요</span>{% endif %}</div></td>
-      <td class="r num" data-label="{{ '현재가' if w.live_at else '종가' }}">{{ w.close | num }}</td>
-      <td class="r num" data-label="어제보다">{{ m.chg(w.change_pct) }}</td>
-      <td class="r num" data-label="평가손익">{% if w.pnl is not none %}{{ m.won(w.pnl) }}<br><small>{{ m.chg(w.pnl_pct) }}</small>{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td class="r num" data-label="20일">{{ m.chg((w.ret20 * 100) if w.ret20 is not none else none) }}</td>
-      <td data-label="참고 점수">{{ m.grade(w.score, w.blocked, w.enough) }}</td>
-      <td data-label="위험">{{ m.flags(w.flags) }}{% if not w.flags | selectattr('level', 'in', ['block', 'warn']) | list %}<span class="muted small">없음</span>{% endif %}</td>
-      <td class="small full" data-label="최근 공시">{% if w.last_disc %}<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ w.last_disc.rcept_no }}" target="_blank" rel="noopener">{{ w.last_disc.report_nm[:24] }}</a><div class="muted">{{ w.last_disc.rcept_dt[4:6] }}/{{ w.last_disc.rcept_dt[6:] }}</div>{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td class="full actions-cell"><button class="ghost danger" data-del="{{ w.code }}" data-name="{{ w.name }}" aria-label="{{ w.name }} 삭제">삭제</button></td>
+    <tr>
+      <td><a href="/stocks/{{ w.code }}" class="name"><b>{{ w.name or w.code }}</b></a> <span class="chip {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span>{% if w.blocked %} <span class="chip block">⛔ 매수 금지</span>{% endif %}<div class="cap c3">{{ w.code }}{% if w.memo %} · {{ w.memo[:30] }}{% endif %}</div></td>
+      <td>{{ w.close | num }}</td><td>{{ m.chg(w.change_pct) }}</td>
+      <td>{{ m.won(w.pnl) if w.pnl is not none else '–' }}</td><td>{{ m.chg(w.pnl_pct) if w.pnl_pct is not none else '–' }}</td>
+      <td>{{ m.chg((w.ret20 * 100) if w.ret20 is not none else none) }}</td>
+      <td style="text-align:left">{{ m.grade(w.score, w.blocked, w.enough) }}</td>
+      <td style="text-align:left">{{ m.flags(w.flags) }}</td>
+      <td style="text-align:left" class="small">{% if w.last_disc %}<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo={{ w.last_disc.rcept_no }}" target="_blank" rel="noopener">{{ w.last_disc.report_nm[:20] }}</a> <span class="c3">{{ w.last_disc.rcept_dt[4:6] }}/{{ w.last_disc.rcept_dt[6:] }}</span>{% else %}<span class="c3">–</span>{% endif %}</td>
     </tr>
     {% endfor %}
-    </tbody>
-  </table></div>
-  {% else %}<p class="empty">아래 '종목 추가'에서 보유·관심 종목을 넣으세요.</p>{% endif %}
+    </tbody></table></div></div>
+  {% else %}
+  <div class="empty-state"><div class="em">⭐</div><h3>아직 종목이 없어요</h3><p>아래에서 보유·관심 종목을 추가하세요.</p></div>
+  {% endif %}
 </section>
 
-<details class="card fold" {{ 'open' if not rows }}>
+{% if rows %}
+<details class="card fold">
+  <summary><b>목록 편집</b> <span class="muted small">메모 확인 · 삭제</span></summary>
+  <ul class="list">
+  {% for w in rows %}<li class="edit-line"><div style="min-width:0"><b>{{ w.name or w.code }}</b> <span class="chip {{ 'own' if w.kind == '보유' }}">{{ w.kind }}</span>
+      <div class="small c3">{{ w.code }}{% if w.kind == '보유' %} · {{ w.qty | num if w.qty else '수량 –' }}주 · 단가 {{ w.avg_price | num if w.avg_price else '–' }}{% endif %}{% if w.memo %} · {{ w.memo }}{% elif w.kind == '보유' %} · <span class="t-warn">산 이유를 메모해 두세요</span>{% endif %}</div></div>
+    <button class="btn ghost danger" data-del="{{ w.code }}" data-name="{{ w.name }}" aria-label="{{ w.name }} 삭제">삭제</button></li>{% endfor %}
+  </ul>
+  <p class="small c3">수량·단가·메모를 바꾸려면 아래 '종목 추가'에 같은 종목을 다시 넣으세요 (덮어씀).</p>
+</details>
+{% endif %}
+
+<details class="card fold" id="add" {{ 'open' if not rows }}>
   <summary><b>+ 종목 추가</b> <span class="muted small">{{ '텔레그램을 연결하면 보유 종목에 위험 공시가 뜰 때 바로 알립니다' if alerts_off else '보유 종목은 위험 공시가 뜨면 텔레그램으로 바로 알립니다' }}</span></summary>
   <form id="add-form" class="add-form" autocomplete="off">
     <div class="field grow search-box">

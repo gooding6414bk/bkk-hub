@@ -25,6 +25,89 @@
     return data;
   }
 
+
+  // ---------- 바텀시트 · 화면 설정 (2026-11 디자인 v2) ----------
+  function openSheet(title, bodyEl, onClose) {
+    const scrim = document.createElement("div");
+    scrim.className = "scrim";
+    const sh = document.createElement("div");
+    sh.className = "sheet";
+    sh.setAttribute("role", "dialog");
+    sh.setAttribute("aria-modal", "true");
+    sh.innerHTML = `<div class="grab"></div><h3>${esc(title)}</h3>`;
+    sh.appendChild(bodyEl);
+    const close = () => { scrim.remove(); sh.remove(); document.removeEventListener("keydown", onKey); if (onClose) onClose(); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    scrim.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    document.body.append(scrim, sh);
+    sh.querySelector("button, a")?.focus();
+    return close;
+  }
+  async function savePrefs(body, msg) {
+    try {
+      await call("PUT", "/api/prefs", body);
+      toast(msg || "저장했습니다");
+      setTimeout(() => location.reload(), 350);
+    } catch (err) { toast(err.message, true); }
+  }
+  // 정렬·보기 고르기: data-sheet / data-key("watch.sort") / data-opts / data-cur
+  $$("[data-sheet]").forEach((b) => b.addEventListener("click", () => {
+    const opts = JSON.parse(b.dataset.opts || "{}"), [grp, key] = b.dataset.key.split(".");
+    const body = document.createElement("div");
+    let close;
+    Object.entries(opts).forEach(([v, label]) => {
+      const o = document.createElement("button");
+      o.type = "button";
+      o.className = "opt" + (v === b.dataset.cur ? " on" : "");
+      o.textContent = label;
+      o.addEventListener("click", () => { close(); savePrefs({ [grp]: { [key]: v } }, `${label}(으)로 바꿨습니다`); });
+      body.appendChild(o);
+    });
+    if (grp === "watch" && key === "sort") {
+      const p = document.createElement("p");
+      p.className = "small c3";
+      p.textContent = "오늘 많이 오른 순 정렬은 일부러 넣지 않았습니다 (추격 매수 방지).";
+      body.appendChild(p);
+    }
+    close = openSheet(key === "sort" ? "정렬" : "보기", body);
+  }));
+  // 홈 편집: 보이기/숨기기 + 위·아래 (드래그 없음)
+  function editHome(btn) {
+    let rows = JSON.parse(btn.dataset.widgets || "[]");
+    const body = document.createElement("div");
+    const draw = () => {
+      body.innerHTML = rows.map((w, i) => `
+        <div class="edit-row ${w.on ? "" : "off"} ${w.locked ? "locked" : ""}">
+          <span class="tgl ${w.on ? "on" : ""}" role="checkbox" aria-checked="${w.on}" tabindex="0" data-i="${i}" aria-label="${esc(w.name)} 보이기"><i></i></span>
+          <div><div class="nm">${esc(w.name)}${w.locked ? " 🔒" : ""}</div><div class="ds">${esc(w.desc)}</div></div>
+          <button type="button" data-up="${i}" aria-label="${esc(w.name)} 위로" ${i === 0 ? "disabled" : ""}>↑</button>
+          <button type="button" data-down="${i}" aria-label="${esc(w.name)} 아래로" ${i === rows.length - 1 ? "disabled" : ""}>↓</button>
+        </div>`).join("") + `
+        <p class="small c3">'오늘 볼 것'은 숨길 수 없고 위험이 있으면 늘 맨 위에 옵니다. '수집 상태'는 꺼 두어도 문제가 생기면 저절로 보입니다. 휴대폰과 PC가 같은 설정을 씁니다.</p>
+        <button type="button" class="btn block" data-save>완료</button>
+        <button type="button" class="btn ghost block" data-reset style="margin-top:8px">기본 배치로 되돌리기</button>`;
+    };
+    body.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-i],[data-up],[data-down],[data-save],[data-reset]");
+      if (!t) return;
+      if (t.dataset.i !== undefined) { const w = rows[+t.dataset.i]; if (!w.locked) w.on = !w.on; }
+      else if (t.dataset.up !== undefined) { const i = +t.dataset.up; [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; }
+      else if (t.dataset.down !== undefined) { const i = +t.dataset.down; [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; }
+      else if (t.dataset.save !== undefined) { close(); return savePrefs({ home: rows.map((w) => [w.id, w.on]) }, "홈 화면을 저장했습니다"); }
+      else if (t.dataset.reset !== undefined) { close(); return savePrefs({ reset: true }, "기본 배치로 되돌렸습니다"); }
+      draw();
+    });
+    body.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && e.target.dataset.i !== undefined) { e.preventDefault(); e.target.click(); } });
+    draw();
+    const close = openSheet("홈 화면 편집", body);
+  }
+  const editBtn = $("[data-edit-home]");
+  if (editBtn) {
+    editBtn.addEventListener("click", () => editHome(editBtn));
+    if (new URLSearchParams(location.search).get("edit") === "1") editHome(editBtn);
+  }
+
   // ---------- 종목 검색·추가 ----------
   const form = $("#add-form");
   if (form) {

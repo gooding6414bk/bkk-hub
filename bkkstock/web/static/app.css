@@ -296,7 +296,7 @@ details form label { display: flex; flex-direction: column; gap: 4px; }
 .fc span { color: var(--muted); font-size: .8rem; }
 @media (max-width: 700px) { .fc { grid-template-columns: 1fr 1fr; } }
 .kv2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; font-size: .86rem; margin: 10px 0; }
-.kv2 div span { color: var(--muted); display: block; font-size: .76rem; }
+.kv2 div > span:first-child { color: var(--muted); display: block; font-size: .76rem; }   /* 값의 .up/.down 색을 덮지 않게 */
 .caveat { font-size: .8rem; color: var(--muted); border-left: 3px solid var(--border); padding-left: 8px; margin: 8px 0 0; }
 
 /* 수급 표 */
@@ -424,3 +424,5 @@ section[id^="s-"], #forecast { scroll-margin-top: 110px; }
 .summary3 { padding-left: 1.2em; }
 .summary3 li { margin: 4px 0; }
 @media (min-width: 900px) { .calc { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.tbl td.num, .tbl td.r { text-align: right; }   /* 머리 칸(.r)과 숫자 칸 정렬 맞춤 */

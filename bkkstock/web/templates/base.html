@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
-<meta name="theme-color" content="#2f5bea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14171c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f4f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -17,22 +17,38 @@
 <title>{% block title %}보드{% endblock %} · 건우주식</title>
 {% block head_before %}{% endblock %}
 <link rel="stylesheet" href="/static/app.css?v={{ version }}">
+<link rel="stylesheet" href="/static/ds.css?v={{ version }}">
 {% block head %}{% endblock %}
 </head>
 <body>
-<header class="top">
-  <a class="brand" href="/">건우<b>주식</b></a>
-  <nav>
-    <a href="/" class="{{ 'on' if nav == 'dashboard' }}">홈</a>
-    <a href="/stocks" class="{{ 'on' if nav in ('stocks', 'stock') }}">📈 주식</a>
-    <a href="/knowledge" class="{{ 'on' if nav == 'knowledge' }}">📚 지식</a>
-    <a href="/apis" class="{{ 'on' if nav == 'apis' }}">API</a>
-    <a href="/ops" class="{{ 'on' if nav == 'ops' }}">운영</a>
-  </nav>
-  <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost">로그아웃</button></form>
-</header>
-{% if demo %}<div class="demo">샘플 데이터 화면입니다. 실제 시세나 공시가 아닙니다.</div>{% endif %}
-<main>{% block content %}{% endblock %}</main>
+{%- set ICONS = {
+  'home': '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  'stocks': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  'ind': '<path d="m3 17 6-6 4 4 8-8M15 7h6v6"/>',
+  'know': '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
+  'set': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'} -%}
+{%- set TABS = [('dashboard', '/', '홈', 'home'), ('stocks', '/stocks', '주식', 'stocks'), ('indicators', '/indicators', '지표', 'ind'),
+                ('knowledge', '/knowledge', '지식', 'know'), ('settings', '/settings', '설정', 'set')] -%}
+{%- set active = 'stocks' if nav in ('stocks', 'stock') else 'settings' if nav in ('apis', 'ops', 'settings') else nav -%}
+<div class="shell">
+  <aside class="side" aria-label="메뉴">
+    <a class="brand" href="/">건우<b>주식</b></a>
+    {% for key, href, label, ic in TABS %}<a href="{{ href }}" class="{{ 'on' if active == key }}"><svg viewBox="0 0 24 24" aria-hidden="true">{{ ICONS[ic] | safe }}</svg>{{ label }}{% if key == 'settings' and nav_badge %} <span class="chip warn" style="margin-left:auto">{{ nav_badge }}</span>{% endif %}</a>{% endfor %}
+    <div class="grow"></div>
+    <div class="foot">{{ nav_status or '' }}</div>
+  </aside>
+  <div class="content">
+    <header class="appbar">
+      <h1>{% block apptitle %}{{ self.title() }}{% endblock %}</h1>
+      {% block appbar_actions %}{% endblock %}
+    </header>
+    {% if demo %}<div class="demo">샘플 데이터 화면입니다. 실제 시세나 공시가 아닙니다.</div>{% endif %}
+    <main>{% block content %}{% endblock %}</main>
+  </div>
+</div>
+<nav class="tabbar" aria-label="메뉴">
+  {% for key, href, label, ic in TABS %}<a href="{{ href }}" class="{{ 'on' if active == key }}"{% if active == key %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true">{{ ICONS[ic] | safe }}</svg>{% if key == 'settings' and nav_badge %}<span class="badge" aria-label="확인할 것 있음"></span>{% endif %}{{ label }}</a>{% endfor %}
+</nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js?v={{ version }}"></script>
 {% block scripts %}{% endblock %}

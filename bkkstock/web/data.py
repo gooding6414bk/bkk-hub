@@ -57,7 +57,11 @@ def universe_index(ctx: Ctx) -> pd.DataFrame:
     if uni.empty:
         day = ref_day(ctx)
         p = ctx.store.read_clean("prices_krx", day) if day else None
-        df = p[["code", "name", "market"]] if p is not None and not p.empty else pd.DataFrame(columns=["code", "name", "market"])
+        if p is not None and not p.empty:
+            df = p.reindex(columns=["code", "name", "market"])      # 예전 자료에 market 열이 없어도 깨지지 않게
+            df["market"] = df["market"].fillna("")
+        else:
+            df = pd.DataFrame(columns=["code", "name", "market"])
     else:
         df = stocks_only(uni)[["code", "name", "market"]]
     _search_cache.update(t=time.time(), df=df)
@@ -262,6 +266,50 @@ def _market_cached(data_dir: str, day: str, mtime: float, ov_mtime: float):
     return marketmod.overview(Store(data_dir), dt.date.fromisoformat(day))
 
 
+_badge_cache: dict = {"t": 0.0, "v": ("", "")}
+
+
+def nav_badge(ctx: Ctx) -> tuple[str, str]:
+    """설정 메뉴 배지(오류·미설정 개수)와 사이드바 아래 한 줄. 60초 캐시."""
+    if time.time() - _badge_cache["t"] < 60:
+        return _badge_cache["v"]
+    cards = api_cards(ctx)
+    bad = sum(1 for a in cards if a["state"] == "fail")
+    missing = sum(1 for a in cards if a["state"] == "missing" and not a.get("optional"))
+    last = ctx.store.last_run("daily")
+    st = last["status"] if last else None
+    badge = f"오류 {bad}" if bad else (f"미설정 {missing}" if missing else "")
+    status = ("수집 " + {"ok": "정상", "partial": "일부 실패", "fail": "실패", "skipped": "휴장", "pending": "대기",
+                       "running": "진행 중"}.get(st, "기록 없음") + (f" · {last['day'][5:]}" if last else ""))
+    if st == "fail" and not badge:
+        badge = "수집 실패"
+    _badge_cache.update(t=time.time(), v=(badge, status))
+    return badge, status
+
+
+def _events(ctx: Ctx) -> list[dict]:
+    from ..analysis import macro as macromod
+    return macromod.upcoming_events(now_kst().date(), 4)
+
+
+IND_SUMMARY = ["us_fed", "us_10y", "us_spread", "vix", "dxy", "us_cpi_yoy"]
+
+
+def _ind_summary(ctx: Ctx) -> list[dict]:
+    """홈 '지표 요약' 위젯: 지표 화면 카드 중 몇 개."""
+    v = indicators(ctx)
+    cards = {c["name"]: c for g in v["groups"] for c in g["cards"]}
+    return [cards[n] for n in IND_SUMMARY if n in cards and not cards[n].get("empty")]
+
+
+def settings_summary(ctx: Ctx) -> dict:
+    cards = api_cards(ctx)
+    last = ctx.store.last_run("daily")
+    return {"api_ok": sum(1 for a in cards if a["state"] == "ok"), "api_bad": [a["name"] for a in cards if a["state"] == "fail"],
+            "api_missing": [a["name"] for a in cards if a["state"] == "missing" and not a.get("optional")],
+            "last": last, "deploy": deploy_info(ctx), "alerts_off": not ctx.tg.configured, "n_watch": len(ctx.store.watchlist())}
+
+
 def _safe(fn, ctx):
     try:
         return fn(ctx)
@@ -424,6 +472,8 @@ def dashboard(ctx: Ctx) -> dict:
         "api_bad": sum(1 for a in apis if a["state"] == "fail"),
         "api_missing": sum(1 for a in apis if a["state"] == "missing" and not a.get("optional")),
         "n_scored": len(out_df), "live": live, "home_market": _safe(home_market, ctx),
+        "events": _safe(_events, ctx) or [],
+        "ind": _safe(_ind_summary, ctx),
     }
 
 
