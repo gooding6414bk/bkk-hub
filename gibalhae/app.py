@@ -19,11 +19,11 @@ from pipeline import keys  # noqa: E402
 from pipeline.webui import bp  # noqa: E402
 
 LOGIN_HTML = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>기발해 콘텐츠 · 로그인</title><link rel="stylesheet" href="{{ url_for('gibalhae.static', filename='gibalhae.css') }}">
+<title>영상 작업실 · 로그인</title><link rel="stylesheet" href="{{ url_for('gibalhae.static', filename='gibalhae.css') }}">
 <style>.box{max-width:360px;margin:18vh auto;padding:26px;border-radius:14px;background:var(--cell)}.box h1{margin:0 0 14px;font-size:18px}
 .box input{width:100%;padding:10px;border:1px solid var(--line2);border-radius:8px;background:var(--cell2);color:var(--fg);margin:6px 0 12px}
 .box button{width:100%;height:38px;border:0;border-radius:8px;background:var(--acc);color:#111;font-weight:700;cursor:pointer}</style></head>
-<body class="gb"><form class="box" method="post"><h1>기발해 콘텐츠</h1>{% if bad %}<div class="err">비밀번호가 틀립니다</div>{% endif %}
+<body class="gb"><form class="box" method="post"><h1>🎬 영상 작업실</h1>{% if bad %}<div class="err">비밀번호가 틀립니다</div>{% endif %}
 <input type="password" name="password" placeholder="비밀번호" autofocus autocomplete="current-password"><button type="submit">들어가기</button></form></body></html>"""
 
 
@@ -50,7 +50,7 @@ def create_app(password: str | None = None) -> Flask:
         raise SystemExit("GIBALHAE_PASSWORD 를 정해야 시작합니다")
     app = Flask(__name__)
     app.secret_key = _secret()
-    app.config.update(GIBALHAE_HOME_URL="/gibalhae", GIBALHAE_HOME_LABEL="기발해", GIBALHAE_LOGOUT_URL="/logout",
+    app.config.update(GIBALHAE_HOME_URL="", GIBALHAE_HOME_LABEL="", GIBALHAE_LOGOUT_URL="/logout",
                       GIBALHAE_ALLOW=lambda: bool(session.get("ok")), SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
     @app.before_request

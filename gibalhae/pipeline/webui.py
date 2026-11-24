@@ -141,6 +141,44 @@ def overview():
                     "credits": credits, "running": running, "topics": _topics()[:40]})
 
 
+PROGRESS = os.path.join(REPO, "gibalhae", "progress.json")
+FLOW = ("draft", "approved", "built", "published")
+
+
+@bp.get("/api/gibalhae/progress")
+def progress():
+    """업무 진행 — progress.json(단계·결정·기록, 클로드가 고친다) + 실제 상태(키·콘텐츠·작업)로 자동 체크."""
+    try:
+        with open(PROGRESS, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {"stages": [], "log": []}
+    kp = keys.public()
+    days = [_day_row(d) for d in C.list_days()]
+    flow = {s: {"shorts": 0, "blog": 0} for s in FLOW + ("rejected",)}
+    for d in days:
+        for kind in ("shorts", "blog"):
+            st = (d[kind] or {}).get("status")
+            if st in flow:
+                flow[st][kind] += 1
+
+    def auto(rule: str) -> bool:
+        kind, _, name = rule.partition(":")
+        if kind == "key":
+            return bool(kp.get(name, {}).get("set"))
+        if kind == "content":
+            return any(flow[name].values()) if name in flow else False
+        return False
+
+    for st in data.get("stages", []):
+        for it in st.get("items", []):
+            if it.get("auto"):
+                it["done"] = auto(it["auto"])
+    with _lock:
+        recent = sorted(_jobs.values(), key=lambda j: -j["started"])[:5]
+    return jsonify({**data, "flow": flow, "days": len(days), "jobs": [_job_json(j) for j in recent]})
+
+
 def _topics() -> list[dict]:
     p = os.path.join(REPO, "gibalhae", "topics.md")
     out = []

@@ -251,17 +251,58 @@ async function loadKeys() {
   }));
 }
 
+// ---------------------------------------------------------------- 진행
+const PG = { done: ["완료", "ok"], doing: ["진행 중", "doing"], todo: ["할 일", "none"], paused: ["멈춤", "paused"], blocked: ["막힘", "bad"] };
+const pgBadge = (s) => `<span class="pg-st ${(PG[s] || PG.todo)[1]}">${esc((PG[s] || [s])[0])}</span>`;
+async function loadProgress() {
+  let d;
+  try { d = await getJSON("/api/gibalhae/progress"); } catch (e) { $("pg-steps").innerHTML = `<li class="err">${esc(e.message)}</li>`; return; }
+  $("pg-state").innerHTML = d.state ? `<b>${esc(d.state)}</b><span>${esc(d.state_note || "")}</span>` : "";
+  $("pg-state").hidden = !d.state;
+  $("pg-updated").textContent = d.updated ? `${d.updated} 기준` : "";
+  const stages = d.stages || [];
+  const pct = (st) => { const it = st.items || []; return it.length ? Math.round(100 * it.filter((x) => x.done).length / it.length) : (st.status === "done" ? 100 : 0); };
+  $("pg-steps").innerHTML = stages.map((st, i) => `
+    <li class="pg-step ${esc((PG[st.status] || PG.todo)[1])}">
+      <span class="pg-dot">${st.status === "done" ? "✓" : i + 1}</span>
+      <b>${esc(st.title)}</b>${pgBadge(st.status)}
+      <span class="pg-bar"><i style="width:${pct(st)}%"></i></span><span class="adm-note">${pct(st)}%</span>
+    </li>`).join("");
+  const decide = stages.flatMap((st) => (st.items || []).filter((x) => x.decision && !x.done).map((x) => ({ ...x, stage: st.title })));
+  const waiting = stages.filter((st) => st.status === "paused").map((st) => ({ text: `「${st.title}」 다시 시작할지`, stage: "보류" }));
+  $("pg-decide").innerHTML = decide.concat(waiting).map((x) => `<li><span>${esc(x.text)}</span><span class="adm-note">${esc(x.stage)}</span></li>`).join("")
+    || `<li class="adm-note">없음</li>`;
+  const f = d.flow || {};
+  $("pg-flow").innerHTML = [["draft", "초안"], ["approved", "승인"], ["built", "영상 완성"], ["published", "올림"]].map(([k, name], i) => `
+    ${i ? '<span class="pg-arrow">→</span>' : ""}<div class="pg-box"><span class="adm-note">${name}</span>
+      <b>${(f[k] || {}).shorts || 0}<small> / ${(f[k] || {}).blog || 0}</small></b></div>`).join("")
+    + (f.rejected && (f.rejected.shorts || f.rejected.blog) ? `<div class="adm-note">반려 ${f.rejected.shorts} / ${f.rejected.blog}</div>` : "");
+  $("pg-jobs").innerHTML = (d.jobs || []).length ? d.jobs.map((j) =>
+    `<div class="pg-job"><span class="gb-st ${j.status === "ok" ? "ok" : j.status === "fail" ? "rejected" : "approved"}">${esc(j.status === "ok" ? "성공" : j.status === "fail" ? "실패" : "도는 중")}</span>
+      ${esc(j.name)} ${esc(j.date || "")} <span class="adm-note">${fmtTime(j.started)}</span></div>`).join("") : "실행한 작업 없음";
+  $("pg-cards").innerHTML = stages.map((st) => `
+    <div class="pg-card ${esc((PG[st.status] || PG.todo)[1])}">
+      <div class="pg-card-head"><b>${esc(st.title)}</b>${pgBadge(st.status)}</div>
+      ${st.note ? `<div class="adm-note">${esc(st.note)}</div>` : ""}
+      <ul>${(st.items || []).map((x) => `<li class="${x.done ? "done" : ""}">
+        <span class="pg-check">${x.done ? "✓" : x.decision ? "?" : ""}</span>${esc(x.text)}
+        ${x.auto ? '<span class="pg-auto">자동 확인</span>' : ""}${x.decision && !x.done ? '<span class="pg-auto dec">결정 필요</span>' : ""}</li>`).join("")}</ul>
+    </div>`).join("");
+  $("pg-log").innerHTML = (d.log || []).map((l) => `<li><span class="pg-date">${esc(l.date)}</span><span>${esc(l.text)}</span></li>`).join("");
+}
+
 // ---------------------------------------------------------------- 탭
-const TABS = ["content", "keys", "jobs"];
+const TABS = ["progress", "content", "keys", "jobs"].filter((t) => $(`tab-${t}`));  // 보드 안 판에는 진행 탭이 없다
 function showTab(tab) {
   TABS.forEach((t) => { $(`tab-${t}`).hidden = t !== tab; });
   document.querySelectorAll(".adm-tab").forEach((b) => { const on = b.dataset.tab === tab; b.classList.toggle("active", on); b.setAttribute("aria-selected", on); });
   location.hash = tab;
   if (tab === "keys") loadKeys();
   else if (tab === "jobs") loadJobs();
+  else if (tab === "progress") { loadProgress(); loadOverview(); }
   else loadOverview();
 }
 document.querySelectorAll(".adm-tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-$("gb-reload").addEventListener("click", () => showTab((location.hash || "#content").slice(1)));
+$("gb-reload").addEventListener("click", () => showTab(TABS.includes((location.hash || "").slice(1)) ? location.hash.slice(1) : TABS[0]));
 $("gb-new").addEventListener("click", newDay);
-showTab(TABS.includes((location.hash || "").slice(1)) ? location.hash.slice(1) : "content");
+showTab(TABS.includes((location.hash || "").slice(1)) ? location.hash.slice(1) : TABS[0]);

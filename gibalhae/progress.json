@@ -1,0 +1,52 @@
+{
+  "updated": "2026-11-24",
+  "state": "보류",
+  "state_note": "주인 지시: \"기발해는 나중에\" · \"실행은 하지 마\" — 렌더·업로드·예약 작업은 멈춰 있음",
+  "stages": [
+    {"title": "기반 만들기", "status": "done", "note": "초안 → 승인 → 제작 → 업로드 흐름과 관리 화면",
+     "items": [
+       {"text": "브랜드 규칙·신분 보호 문서(brand.md)", "done": true},
+       {"text": "소재 목록(topics.md)", "done": true},
+       {"text": "글·대본·업로드 담당 에이전트 3개", "done": true},
+       {"text": "금지 표현 자동 검수(check.py)", "done": true},
+       {"text": "관리 화면(콘텐츠·연결·작업 탭)", "done": true}
+     ]},
+    {"title": "시범 영상", "status": "done", "note": "로컬 렌더(edge-tts + ffmpeg) 2편 → 주인 평가 \"너무 구리다\"",
+     "items": [
+       {"text": "시범 쇼츠 2편 렌더", "done": true},
+       {"text": "주인 평가 받기", "done": true}
+     ]},
+    {"title": "영상 도구 바꾸기 (JSON2Video)", "status": "doing", "note": "외부 도구로 화질·음성 올리기",
+     "items": [
+       {"text": "JSON2Video 가입·키 발급", "done": true},
+       {"text": "보드 연결 탭에 JSON2Video 키 넣기", "auto": "key:json2video"},
+       {"text": "요금제 정하기 (무료 = 워터마크·비상업 / Hobby 이상)", "decision": true},
+       {"text": "첫 렌더 시험 (주인 승인 뒤)", "done": false}
+     ]},
+    {"title": "내용·구성 다시 짜기", "status": "todo", "note": "\"내용부터 전체 구성도 구리다\" → 형식부터 새로",
+     "items": [
+       {"text": "잘된 쇼츠 패턴 조사", "done": false},
+       {"text": "형식 다양화 (시리즈 A~D 재정리)", "done": false},
+       {"text": "목소리 고르기 (지금 기본: Hyun Bin 중년 남성)", "decision": true}
+     ]},
+    {"title": "유튜브·배경 연결", "status": "todo", "note": "업로드와 배경 영상",
+     "items": [
+       {"text": "유튜브 토큰 (주인 PC 에서 로그인 한 번)", "auto": "key:youtube_token"},
+       {"text": "구글 동의 화면 \"프로덕션으로 게시\" (안 하면 7일마다 만료)", "done": false},
+       {"text": "Pexels 키 (선택, 무료)", "auto": "key:pexels"}
+     ]},
+    {"title": "매일 운영", "status": "paused", "note": "아침 06:53 초안 → 주인 승인 → 제작 → 18:00 예약 공개",
+     "items": [
+       {"text": "아침 초안 예약 작업 다시 켜기 (지금 꺼짐, 주인 확인 뒤)", "done": false},
+       {"text": "첫 영상 올리기", "auto": "content:published"}
+     ]}
+  ],
+  "log": [
+    {"date": "2026-11-24", "text": "영상 전용 대시보드 분리 시작 — 주식 보드와 따로 띄움, '진행' 탭 추가"},
+    {"date": "2026-11-23", "text": "기발해 전용 채팅으로 나눔. 보류 상태 확인"},
+    {"date": "2026-11-10", "text": "예약 작업 끔 (주인: \"실행은 하지 마\"). JSON2Video 키 클라우드 주입 실패 확인"},
+    {"date": "2026-11-08", "text": "주식 보드와 한 서버에 합침 (🎬 메뉴, /media). 초안은 gibalhae-daily 브랜치에서 읽음"},
+    {"date": "11월 초", "text": "시범 쇼츠 2편 평가 \"구리다\" → JSON2Video 로 전환 결정"},
+    {"date": "2026-09-15", "text": "채널 운영 계획 v2 — 블로그 + 쇼츠 매일 한 소재"}
+  ]
+}
