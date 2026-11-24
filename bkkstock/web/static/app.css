@@ -415,6 +415,8 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 .spend-form label.chk input { width: auto; flex: none; margin-top: 2px; }
 .spend-form fieldset.box { border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px 8px; margin: 10px 0; min-width: 0; }
 form.inline { display: inline; margin: 0; }
+.perks { background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
+.perks ul { margin: 6px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 button.ghost.danger { padding: 4px 10px; }
 
 /* 종목 화면: 바로 가기 칩 · 지표 한 줄 */

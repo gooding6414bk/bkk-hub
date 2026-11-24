@@ -28,8 +28,9 @@
     <label>디지털 온누리 할인율 (%) <input name="onnuri" inputmode="decimal" value="{{ p.onnuri }}"></label>
     <label>지역사랑상품권 할인율 (%) <input name="local" inputmode="decimal" value="{{ p.local }}"></label>
     <label>SKT 멤버십 등급 <select name="skt"><option value="">없음</option>{% for g in skt_grades %}<option {{ 'selected' if p.skt == g }}>{{ g }}</option>{% endfor %}</select></label>
+    {% set ktg = p.kt if p.kt is string else ('일반' if p.kt else '') %}
+    <label>KT 멤버십 등급 (KT 요금이 있으면) <select name="kt"><option value="">없음</option>{% for g in kt_grades %}<option {{ 'selected' if ktg == g }}>{{ g }}</option>{% endfor %}</select></label>
   </div>
-  <label class="chk"><input type="checkbox" name="kt" {{ 'checked' if p.kt is not defined or p.kt }}> KT 요금(휴대폰·인터넷)과 KT 멤버십이 있음 — 빼면 KT 요금 할인·KT 멤버십 연계 카드 혜택을 계산하지 않습니다</label>
   <h3>앱 쓰기 전 올해 사용액 (만 원)</h3>
   <p class="muted small">홈택스 '연말정산 미리보기'의 1~9월 숫자 + 그 뒤 쓴 돈. 앱에 기록한 결제는 빼고 넣으세요.</p>
   <div class="grid-f">
@@ -80,6 +81,22 @@
       <label>유효기간 <input type="date" name="v{{ i }}_exp" value="{{ v.exp or '' }}"></label>
     </div>
     {% if v %}<label class="chk"><input type="checkbox" name="v{{ i }}_del"> 이 상품권 지우기</label>{% endif %}
+  </fieldset>
+  {% endfor %}
+</section>
+
+<section class="card" id="points">
+  <div class="card-head"><h2>포인트</h2></div>
+  <p class="muted small">잔액과 소멸 예정일을 넣으면 결제 추천에서 "여기서 쓸 수 있음·적립됨"을 알려 주고, 소멸 60일 전부터 경고합니다.</p>
+  {% for q in (s.points or []) + [{}, {}] %}{% set i = loop.index0 %}
+  <fieldset class="box">
+    <input type="hidden" name="p{{ i }}_id" value="{{ q.id or '' }}">
+    <div class="grid-f">
+      <label>종류 <select name="p{{ i }}_kind">{% for k in point_kinds %}<option {{ 'selected' if q.kind == k }}>{{ k }}</option>{% endfor %}</select></label>
+      <label>잔액 (점) <input name="p{{ i }}_balance" inputmode="numeric" value="{{ '%.0f' % q.balance if q.balance is defined else '' }}"></label>
+      <label>가장 가까운 소멸일 <input type="date" name="p{{ i }}_exp" value="{{ q.exp or '' }}"></label>
+    </div>
+    {% if q %}<label class="chk"><input type="checkbox" name="p{{ i }}_del"> 이 포인트 지우기</label>{% endif %}
   </fieldset>
   {% endfor %}
   <button type="submit">저장</button>

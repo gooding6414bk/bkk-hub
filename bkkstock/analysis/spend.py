@@ -29,6 +29,8 @@ ONNURI_RATE = 7.0                    # 디지털 온누리 구매 할인 %
 LOCAL_RATE = 10.0                    # 지역사랑상품권 할인 % — 지자체마다 다름(지갑에서 바꿈)
 VOUCHER_KINDS = ("온누리", "지역사랑", "민간")
 SKT_GRADES = ("일반", "실버", "골드", "VIP")
+KT_GRADES = ("일반", "실버", "골드", "VIP", "VVIP")
+POINT_KINDS = ("OK캐쉬백", "해피포인트", "신세계포인트", "기타")
 MAX_RECORDS = 5000
 
 # (키, 이름, 공제 묶음, 쓸 수 있는 정책상품권) — general 은 결제수단(신용/체크)에 따라 갈린다
@@ -64,10 +66,10 @@ def num(v, default: float = 0.0) -> float:
 
 def empty() -> dict:
     return {"profile": {"salary": 0.0, "children": 0, "rate": 0.0, "onnuri": ONNURI_RATE, "local": LOCAL_RATE,
-                        "skt": "", "kt": True,          # SKT 멤버십 등급('' = 없음), KT 요금·멤버십 있음
+                        "skt": "", "kt": "일반",        # 통신사 멤버십 등급('' = 없음). KT 는 예전 True 도 '있음'으로 읽는다
 
                         "base": {k: 0.0 for k in ORDER}, "base_year": 0},
-            "cards": [], "vouchers": [], "records": [], "next": 1}
+            "cards": [], "vouchers": [], "points": [], "records": [], "next": 1}
 
 
 def load(raw: str | None) -> dict:
@@ -134,7 +136,7 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
              rate=min(50.0, num(f.get("rate"))), onnuri=min(30.0, num(f.get("onnuri"), ONNURI_RATE)),
              local=min(30.0, num(f.get("local"), LOCAL_RATE)),
              base={k: num(f.get(f"base_{k}")) * MAN for k in ORDER}, base_year=today.year,
-             skt=f.get("skt") if f.get("skt") in SKT_GRADES else "", kt=bool(f.get("kt")))
+             skt=f.get("skt") if f.get("skt") in SKT_GRADES else "", kt=f.get("kt") if f.get("kt") in KT_GRADES else "")
     from .cards import PRESET
     this = today.strftime("%Y-%m")
     old = {c["id"]: c for c in state["cards"]}
@@ -181,7 +183,19 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
             vouchers.append({"id": int(num(f.get(f"v{i}_id"))) or _new_id(state), "kind": kind, "name": name,
                              "balance": num(f.get(f"v{i}_balance")), "exp": exp})
         i += 1
-    state["cards"], state["vouchers"] = cards, vouchers
+    points, i = [], 0
+    while f"p{i}_kind" in f:
+        kind = f.get(f"p{i}_kind") if f.get(f"p{i}_kind") in POINT_KINDS else ""
+        bal = str(f.get(f"p{i}_balance") or "").strip()
+        if kind and bal and not f.get(f"p{i}_del"):
+            exp = str(f.get(f"p{i}_exp") or "").strip()
+            try:
+                exp = dt.date.fromisoformat(exp).isoformat() if exp else ""
+            except ValueError:
+                exp = ""
+            points.append({"id": int(num(f.get(f"p{i}_id"))) or _new_id(state), "kind": kind, "balance": num(bal), "exp": exp})
+        i += 1
+    state["cards"], state["vouchers"], state["points"] = cards, vouchers, points
     return state
 
 
@@ -393,7 +407,10 @@ def _needs_ok(needs: dict | None, prof: dict | None) -> bool:
     prof = prof or {}
     if "skt" in needs and prof.get("skt", "") not in needs["skt"]:
         return False
-    return not (needs.get("kt") and not prof.get("kt", True))
+    kt = prof.get("kt", "일반")
+    if isinstance(needs.get("kt"), list):
+        return (kt if isinstance(kt, str) else "일반" if kt else "") in needs["kt"]
+    return not (needs.get("kt") and not kt)
 
 
 def _tv(card: dict, v, prev_amt: float | None) -> float:
@@ -581,8 +598,9 @@ def recommend(state: dict, place: str, amount: float, today: dt.date, merchant: 
         ("공제로 돌아오는 세금", tax(group_of(place, "현금", salary), amount), "")]))
     opts.sort(key=lambda o: (-o["pct"], -o["value"]))
     hint = bool(not merchant and any(r.get("match") for c in state["cards"] for r in c.get("rules") or []))
+    perks = perks_for(state, place, merchant, amount)
     return {"place": place, "place_name": PLACE.get(place, PLACE["기타"])[0], "amount": amount, "options": opts,
-            "merchant": merchant, "hint": hint,
+            "merchant": merchant, "hint": hint, "perks": perks,
             "rate": t, "advice": advice(proj, deduction(proj, salary, children) if salary else None, t)}
 
 
@@ -642,6 +660,33 @@ def record_rows(state: dict, today: dt.date, limit: int | None = None) -> list[d
     return rows[:limit] if limit else rows
 
 
+# ---------------- 결제 전에 챙길 것 (멤버십·포인트) ----------------
+def perks_for(state: dict, place: str, merchant: str, amount: float) -> list[dict]:
+    """이 가게에서 어느 카드로 내든 받는 것: 통신사 멤버십 할인, 포인트 적립, 쓸 수 있는 포인트 잔액."""
+    from .perks import PERKS
+    prof, out = state["profile"], []
+    for k in PERKS:
+        if not _match(k, place, merchant) or not _needs_ok(k.get("needs"), prof):
+            continue
+        if k["kind"] == "사용":
+            bal = sum(p["balance"] for p in state.get("points", []) if p["kind"] == k["program"])
+            if bal >= float(k.get("min") or 0) and bal > 0:
+                out.append({**k, "won": min(bal, amount), "text": f"{k['program']} {bal:,.0f}점 있음 — {k['label']}"})
+            continue
+        won = float(k["fixed"]) if k.get("fixed") else amount * float(k.get("rate") or 0) / 100
+        out.append({**k, "won": won, "text": k["label"]})
+    return out
+
+
+def point_rows(state: dict, today: dt.date) -> list[dict]:
+    rows = []
+    for p in state.get("points", []):
+        left = (dt.date.fromisoformat(p["exp"]) - today).days if p.get("exp") else None
+        warn = ["소멸됨"] if left is not None and left < 0 else [f"소멸 {left}일 전"] if left is not None and left <= 60 else []
+        rows.append({**p, "days_left": left, "warn": warn})
+    return rows
+
+
 # ---------------- 대시보드 ----------------
 def dashboard(state: dict, today: dt.date) -> dict:
     p = state["profile"]
@@ -669,6 +714,7 @@ def dashboard(state: dict, today: dt.date) -> dict:
             "now": now, "fut": fut, "refund_now": now["total"] * t if now else 0.0,
             "refund_fut": fut["total"] * t if fut else 0.0, "zone": zone, "advice": text,
             "cards": [{**c, **card_status(state, c, today)} for c in state["cards"]], "vouchers": vouchers,
+            "points": point_rows(state, today),
             "month_spent": sum(float(r["amount"]) for r in mrec),
             "month_benefit": sum(benefit_of(state, r, today) for r in mrec),
             "recent": record_rows(state, today, 5), "groups": GROUP_NAMES}

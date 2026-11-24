@@ -464,7 +464,7 @@ def register_routes(app: Flask) -> None:
         from ..analysis.cards import CATALOG
         return spend_page("spend_wallet.html", "wallet", sp, state, kinds=sp.VOUCHER_KINDS, bonus_text=sp.bonus_text,
                           caps_text=sp.caps_text, catalog=CATALOG, this_month=now_kst().strftime("%Y-%m"),
-                          skt_grades=sp.SKT_GRADES)
+                          skt_grades=sp.SKT_GRADES, kt_grades=sp.KT_GRADES, point_kinds=sp.POINT_KINDS)
 
     @app.post("/spend/wallet/import")
     def spend_wallet_import():

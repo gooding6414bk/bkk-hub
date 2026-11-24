@@ -201,4 +201,4 @@ def test_skt_grade_and_kt_conditions():
     assert sp.card_status(s, dc7, DAY)["fixed_amt"] is None
     assert sp.fill_value(dc7, sp.card_status(s, dc7, DAY), 100_000)[0] == 0
     form = {"salary": "5000", "skt": "VIP"}                                               # KT 칸을 끄고 저장
-    assert sp.wallet_from_form(s, form, DAY)["profile"]["kt"] is False and s["profile"]["skt"] == "VIP"
+    assert sp.wallet_from_form(s, form, DAY)["profile"]["kt"] == "" and s["profile"]["skt"] == "VIP"

@@ -37,6 +37,9 @@
     <input type="hidden" name="memo" value="{{ rec.merchant }}">
     <button type="submit">1순위로 냈어요 — 기록</button><a class="pill" href="/spend/records?place={{ rec.place }}&amount={{ '%.0f' % rec.amount }}&shop={{ rec.merchant | urlencode }}">다른 수단으로 기록</a>
   </form>
+  {% if rec.perks %}<div class="perks"><b class="small">결제 전에 챙길 것 (어느 카드로 내든)</b><ul class="small">
+    {% for k in rec.perks %}<li>{% if k.kind == '할인' %}🏷{% elif k.kind == '적립' %}🪙{% else %}💰{% endif %} {{ k.text }}{% if k.kind != '사용' and k.won >= 1 %} <span class="muted">· 약 {{ won(k.won) }}</span>{% endif %}</li>{% endfor %}
+  </ul></div>{% endif %}
   {% if rec.hint %}<p class="small t-warn">가게 이름을 넣으면 카드의 가맹점 할인(스타벅스·편의점·CGV 등)도 따집니다.</p>{% endif %}
   <p class="muted small">공제로 돌아오는 세금은 올해 예상 사용액과 한계세율 {{ '%.1f' % (rec.rate * 100) }}%로 어림한 값입니다. 카드 할인은 항목별·월 통합 한도와 횟수를 앱 기록 기준으로 반영합니다.</p>
 </section>
@@ -88,7 +91,7 @@
 
 <div class="grid2">
 <section class="card">
-  <div class="card-head"><h2>상품권 지갑</h2><a class="pill" href="/spend/wallet#vouchers">고치기</a></div>
+  <div class="card-head"><h2>상품권·포인트</h2><a class="pill" href="/spend/wallet#vouchers">고치기</a></div>
   {% if d.vouchers %}<ul class="list">
   {% for v in d.vouchers %}
     <li><div class="opt-head"><span><span class="name">{{ v.name }}</span><span class="tag">{{ v.kind }}</span></span><b class="num">{{ won(v.balance) }}</b></div>
@@ -96,6 +99,10 @@
   {% endfor %}</ul>
   <p class="muted small">디지털 온누리는 60% 이상 쓰면 남은 돈을 돌려받을 수 있습니다(할인받은 몫은 빼고).</p>
   {% else %}<p class="empty">등록한 상품권이 없습니다.</p>{% endif %}
+  {% if d.points %}<ul class="list">{% for q in d.points %}
+    <li><div class="opt-head"><span class="name">{{ q.kind }}</span><b class="num">{{ '{:,.0f}'.format(q.balance) }}점</b></div>
+      {% if q.exp or q.warn %}<div class="small muted">{% if q.exp %}소멸 예정 {{ q.exp }}{% endif %}{% for w in q.warn %} · <span class="t-warn">{{ w }}</span>{% endfor %}</div>{% endif %}</li>
+  {% endfor %}</ul>{% endif %}
 </section>
 
 <section class="card">
