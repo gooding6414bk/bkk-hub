@@ -28,7 +28,6 @@
     <a href="/knowledge" class="{{ 'on' if nav == 'knowledge' }}">📚 지식</a>
     <a href="/apis" class="{{ 'on' if nav == 'apis' }}">API 관리</a>
     <a href="/ops" class="{{ 'on' if nav == 'ops' }}">운영</a>
-    {% if has_gibalhae %}<a href="/media" class="{{ 'on' if nav == 'gibalhae' }}" title="콘텐츠" aria-label="콘텐츠">🎬</a>{% endif %}
   </nav>
   <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost">로그아웃</button></form>
 </header>

@@ -30,7 +30,7 @@ c.post("/login", data={"password": "test-pass-123"})
 with c.session_transaction() as _s:                 # 보드의 CSRF 토큰 (gibalhae.js는 <meta name="csrf">에서 읽어 보냄)
     c.environ_base["HTTP_X_CSRF"] = _s["csrf"]
 r = c.get("/media"); check(r.status_code == 200 and "🎬 영상".encode() in r.data and "gibalhae.js" in r.data.decode(), "/media 화면 (예전 /gibalhae 도 열림)")
-r = c.get("/"); check("🎬".encode() in r.data and 'href="/media"' in r.data.decode() and "기발해".encode() not in r.data, "보드 상단 🎬 메뉴 · 메인에 이름 안 보임")
+r = c.get("/"); check('href="/media"' not in r.data.decode() and "기발해".encode() not in r.data, "보드 메뉴에 영상 없음 · 메인에 이름 안 보임")
 
 o = c.get("/api/gibalhae/overview").get_json()
 check(o["days"] and o["days"][0]["date"] == "2026-10-24" and o["days"][0]["shorts"]["status"] == "draft", "overview: 예시 날짜 draft")

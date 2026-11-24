@@ -56,7 +56,8 @@ def test_pages_render_empty_state(client):
         r = c.get(url)
         assert r.status_code == 200, url
     home = c.get("/").get_data(as_text=True)
-    assert "아직 일일 수집 기록이 없습니다" in home and 'href="/media"' in home and "📈 주식" in home
+    assert "아직 일일 수집 기록이 없습니다" in home and "📈 주식" in home
+    assert 'href="/media"' not in home and "🎬" not in home          # 영상 메뉴는 보드에서 뺐다 (주소는 그대로 열림)
     assert "건우<b>주식</b>" in home and "bkk hub" not in home and "bkk<b>hub" not in home
     for url in ("/", "/stocks", "/apis", "/ops", "/knowledge", "/login"):     # 메인 화면들에 콘텐츠 이름이 드러나지 않는다
         assert "기발해" not in c.get(url).get_data(as_text=True), url
