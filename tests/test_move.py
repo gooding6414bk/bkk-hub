@@ -52,3 +52,14 @@ def test_wait_effect_and_scenarios():
     assert sc[30]["cash_needed"] > sc[25]["cash_needed"] + 5e8          # 25억을 넘으면 대출이 줄어 현금이 더 크게 는다
     assert move.holding_tax_note(move.Plan(gongsi=11))["taxable"] is False
     assert move.holding_tax_note(move.Plan(gongsi=14))["base"] == pytest.approx(2e8 * .6)
+
+
+def test_switch_cost_breakeven_and_joint_ownership():
+    p = move.Plan(sell_price=21, buy_cost=6.3, expenses=0.3, hold_years=7, live_years=7, exempt_ok=True, age=40)
+    sw = move.switch_cost(p, 30)
+    expect = move.capital_gains(p)["total"] + 21e8 * .007 + 30e8 * .033 + 30e8 * .007
+    assert sw["total"] == pytest.approx(expect) and sw["breakeven"] == pytest.approx(expect / 30e8 * 100)
+    jc = move.holding_tax_owner_compare(p, 21)              # 공시가 21억 집
+    assert jc["elder"] == 0 and jc["joint"] < jc["single"]  # 40세: 고령자 공제 없음 → 공동명의(18억 공제)가 유리
+    old = move.holding_tax_owner_compare(move.Plan(age=70), 21)
+    assert old["elder"] == .40 and old["single"] < jc["single"]

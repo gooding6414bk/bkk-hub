@@ -19,6 +19,7 @@
     <label>평형 <input name="area" value="{{ p.area }}" maxlength="30" placeholder="예: 25평 · 전용 59㎡"></label>
     <label>명의 <input name="owner" value="{{ p.owner }}" maxlength="30" placeholder="예: 배우자 단독"></label>
     <label>올해 공시가격 (억, 선택) <input name="gongsi" inputmode="decimal" value="{{ p.gongsi or '' }}" placeholder="공시가격 알리미"></label>
+    <label>내 나이 (선택, 이 서버에만) <input name="age" inputmode="numeric" value="{{ p.age or '' }}" placeholder="예: 40"></label>
   </div>
   <div class="grid-f">
     <label>예상 매도가 (억) <input name="sell_price" inputmode="decimal" value="{{ p.sell_price or '' }}" placeholder="예: 20"></label>
@@ -74,11 +75,11 @@
 <section class="card">
   <div class="sec-head"><h2>갈 집 가격별로 보면</h2><span class="small c3">대출은 수도권·규제지역 한도 기준</span></div>
   <div class="tbl-wrap"><table class="dtable">
-    <thead><tr><th>갈 집</th><th>주담대 최대</th><th>취득세 등</th><th>중개보수</th><th>현금이 더 필요</th></tr></thead>
-    <tbody>{% for x in sc %}<tr><td><b>{{ '%.0f' % x.price }}억</b></td><td>{{ eok(x.loan) }}</td><td>{{ man(x.acq) }}</td><td>{{ man(x.fee) }}</td>
+    <thead><tr><th>갈 집</th><th>주담대 최대</th><th>취득세 등</th><th>중개보수</th><th>갈아타기 비용</th><th>본전 초과상승</th><th>현금이 더 필요</th></tr></thead>
+    <tbody>{% for x in sc %}<tr><td><b>{{ '%.0f' % x.price }}억</b></td><td>{{ eok(x.loan) }}</td><td>{{ man(x.acq) }}</td><td>{{ man(x.fee) }}</td><td>{{ eok(x.switch) }}</td><td>{{ '%.1f' % x.breakeven }}%</td>
       <td><b class="{{ 'down' if x.cash_needed > 0 }}">{{ eok(x.cash_needed) if x.cash_needed > 0 else '0 (남음)' }}</b></td></tr>{% endfor %}</tbody>
   </table></div>
-  <p class="small c3">'현금이 더 필요' = 갈 집 + 취득세 + 중개보수 − (지금 집 판 돈에서 양도세·중개보수 뺀 {{ eok(r.net_sale) }}) − 대출. 15억·25억을 넘는 순간 대출 한도가 6억 → 4억 → 2억으로 줄어서, 집값 차이보다 필요한 현금이 더 크게 늡니다.</p>
+  <p class="small c3">'갈아타기 비용' = 양도세 + 판 집·산 집 중개보수 + 취득세 — 옮기는 순간 사라지는 돈. '본전 초과상승' = 이 비용을 메우려면 갈 집이 지금 집보다 <b>추가로</b> 몇 % 더 올라야 하는지.<br>'현금이 더 필요' = 갈 집 + 취득세 + 중개보수 − (지금 집 판 돈에서 양도세·중개보수 뺀 {{ eok(r.net_sale) }}) − 대출. 15억·25억을 넘는 순간 대출 한도가 6억 → 4억 → 2억으로 줄어서, 집값 차이보다 필요한 현금이 더 크게 늡니다.</p>
 </section>
 {% endif %}
 

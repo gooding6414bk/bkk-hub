@@ -476,7 +476,8 @@ def test_realestate_myhome_explained_from_server_data(client):
            "owner": "배우자 단독", "gongsi": "13.5", "sell_price": "21", "buy_cost": "6.3", "expenses": "0.3",
            "hold_years": "7", "live_years": "7", "exempt_ok": "on", "target_price": "30", "cash": "1", "want_loan": "on"})
     page = c.get("/knowledge/realestate").get_data(as_text=True)
-    for word in ("시험단지", "25평", "배우자 단독 명의", "10년 채우면", "손에 남는 돈", "종부세 대상", "1세대"):
+    for word in ("시험단지", "25평", "배우자 단독 명의", "10년 채우면", "손에 남는 돈", "종부세 대상", "1세대",
+                 "전문가라면", "반대로 보면", "우리 기준", "본전"):
         assert word in page, word
     mv = c.get("/knowledge/realestate/move").get_data(as_text=True)
     assert "갈 집 가격별로 보면" in mv and "기다리면" in mv

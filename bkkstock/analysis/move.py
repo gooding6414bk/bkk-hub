@@ -35,6 +35,7 @@ class Plan:
     area: str = ""                 # 평형 (예: 25평 · 전용 59㎡)
     owner: str = ""                # 명의 (예: 배우자 단독)
     gongsi: float = 0.0            # 올해 공시가격 (억, 알리미에서) — 보유세 어림용
+    age: int = 0                   # 나이 (종부세 고령자 공제·대출 만기·청약 판단용, 이 서버에만)
 
     @classmethod
     def from_form(cls, f) -> "Plan":
@@ -47,7 +48,8 @@ class Plan:
                    hold_years=num("hold_years"), live_years=num("live_years"), exempt_ok=bool(f.get("exempt_ok")),
                    target_price=num("target_price"), target_over85=bool(f.get("target_over85")), cash=num("cash"),
                    want_loan=bool(f.get("want_loan")), note=str(f.get("note", ""))[:60],
-                   area=str(f.get("area", ""))[:30], owner=str(f.get("owner", ""))[:30], gongsi=num("gongsi"))
+                   area=str(f.get("area", ""))[:30], owner=str(f.get("owner", ""))[:30], gongsi=num("gongsi"),
+                   age=int(min(num("age"), 120)))
 
     @classmethod
     def from_dict(cls, d: dict) -> "Plan":
@@ -191,8 +193,10 @@ def scenarios(p: Plan) -> list[dict]:
     out = []
     for t in sorted(prices):
         r = calc(Plan(**{**p.to_dict(), "target_price": float(t), "want_loan": True}))
+        sw = switch_cost(p, float(t))
         out.append({"price": t, "loan": r["loan"], "acq": r["acq"]["total"], "fee": r["buy_fee"], "need": r["need"],
-                    "net_sale": r["net_sale"], "cash_needed": max(0.0, r["need"] - r["net_sale"] - r["loan"])})
+                    "net_sale": r["net_sale"], "cash_needed": max(0.0, r["need"] - r["net_sale"] - r["loan"]),
+                    "switch": sw["total"], "breakeven": sw["breakeven"]})
     return out
 
 
@@ -205,3 +209,37 @@ def holding_tax_note(p: Plan) -> dict | None:
     base = over * .60
     return {"gongsi": g, "over": over, "base": base, "taxable": over > 0,
             "rough": base * .005 if over else 0.0}     # 과세표준 3억 이하 0.5% (세액공제 전)
+
+
+def switch_cost(p: Plan, target: float | None = None) -> dict:
+    """갈아타기에 '사라지는 돈': 양도세 + 판 집 중개보수 + 취득세 등 + 산 집 중개보수.
+    breakeven = 이 비용을 메우려면 갈 집이 지금 집보다 '추가로' 몇 % 더 올라야 하나 (갈 집 가격 대비)."""
+    t = (target if target is not None else p.target_price) * EOK
+    sell = p.sell_price * EOK
+    tax = capital_gains(p)["total"] if sell else 0.0
+    sf = brokerage(sell)[0] if sell else 0.0
+    acq = acquisition_tax(t, p.target_over85)["total"] if t else 0.0
+    bf = brokerage(t)[0] if t else 0.0
+    total = tax + sf + acq + bf
+    return {"tax": tax, "sell_fee": sf, "acq": acq, "buy_fee": bf, "total": total,
+            "breakeven": total / t * 100 if t else None}
+
+
+def holding_tax_owner_compare(p: Plan, gongsi_new: float) -> dict:
+    """갈 집 종부세: 단독(1세대 1주택 12억 공제 + 나이·보유 세액공제) vs 부부 공동(각자 9억 = 18억 공제).
+    과세표준 = (공시가 − 공제) × 60%, 세율은 1주택 구간 0.5~2.7% 중 낮은 구간만 어림(세부담 상한·재산세 공제 무시)."""
+    g = gongsi_new * EOK
+
+    def tax(base):
+        steps = [(3e8, .005), (6e8, .007), (12e8, .010), (25e8, .013), (50e8, .015), (94e8, .020), (float("inf"), .027)]
+        out, prev = 0.0, 0.0
+        for top, r in steps:
+            if base > prev:
+                out += (min(base, top) - prev) * r
+            prev = top
+        return out
+    age = p.age or 0
+    elder = .40 if age >= 70 else .30 if age >= 65 else .20 if age >= 60 else 0.0
+    single = tax(max(0.0, g - 12 * EOK) * .6) * (1 - min(.8, elder))          # 새 집이라 보유 공제는 0으로 시작
+    joint = 2 * tax(max(0.0, g / 2 - 9 * EOK) * .6)
+    return {"single": single, "joint": joint, "elder": elder}

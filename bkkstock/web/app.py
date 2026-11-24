@@ -440,8 +440,11 @@ def register_routes(app: Flask) -> None:
             plan = movemod.Plan.from_dict(_json.loads(ctx().store.meta_get("move_plan") or "{}"))
         except ValueError:
             plan = movemod.Plan()
+        tgt = plan.target_price or (plan.sell_price + 9 if plan.sell_price else 0)
         return render_template("knowledge_realestate.html", nav="knowledge", ktab="realestate", p=plan,
-                               r=movemod.calc(plan), wait=movemod.wait_effect(plan), ht=movemod.holding_tax_note(plan))
+                               r=movemod.calc(plan), wait=movemod.wait_effect(plan), ht=movemod.holding_tax_note(plan),
+                               sc=movemod.scenarios(plan), tgt=tgt,
+                               jc=movemod.holding_tax_owner_compare(plan, tgt * .7) if tgt else None)
 
     @app.get("/ops")
     def ops():
