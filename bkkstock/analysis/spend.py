@@ -450,7 +450,9 @@ def _best(card, place, merchant, amount, prev_amt, by_rule, cnt, prof=None) -> t
             won = min(won, max(0.0, _tv(card, r["month_cap"], prev_amt) - by_rule.get(i, 0.0)))
         if r.get("group"):                         # 여러 항목이 함께 쓰는 한도 (예: 제휴 외식 통합 월 3만 원)
             g = r["group"]
-            won = min(won, max(0.0, float((card.get("group_caps") or {}).get(g, won)) - by_rule.get("g:" + g, 0.0)))
+            gcap = (card.get("group_caps") or {}).get(g)
+            gcap = won if gcap is None else _tv(card, gcap, prev_amt)
+            won = min(won, max(0.0, gcap - by_rule.get("g:" + g, 0.0)))
         if won > best[0]:
             best = (won, i, r.get("label", ""))
     return best
@@ -673,8 +675,13 @@ def perks_for(state: dict, place: str, merchant: str, amount: float) -> list[dic
             if bal >= float(k.get("min") or 0) and bal > 0:
                 out.append({**k, "won": min(bal, amount), "text": f"{k['program']} {bal:,.0f}점 있음 — {k['label']}"})
             continue
-        won = float(k["fixed"]) if k.get("fixed") else amount * float(k.get("rate") or 0) / 100
+        won = min(amount, float(k["fixed"])) if k.get("fixed") else amount * float(k.get("rate") or 0) / 100
         out.append({**k, "won": won, "text": k["label"]})
+    tel = [k for k in out if k["kind"] == "할인" and k["program"] in ("SKT 멤버십", "KT 멤버십")]
+    if len({k["program"] for k in tel}) > 1:                 # 통신사 멤버십 할인은 보통 한 번에 하나만
+        top = max(tel, key=lambda k: k["won"])
+        for k in tel:
+            k["text"] += " — 더 큼, 이걸로" if k is top else " — 한 번에 하나만"
     return out
 
 

@@ -202,3 +202,21 @@ def test_skt_grade_and_kt_conditions():
     assert sp.fill_value(dc7, sp.card_status(s, dc7, DAY), 100_000)[0] == 0
     form = {"salary": "5000", "skt": "VIP"}                                               # KT 칸을 끄고 저장
     assert sp.wallet_from_form(s, form, DAY)["profile"]["kt"] == "" and s["profile"]["skt"] == "VIP"
+
+
+def test_membership_perks_pick_the_bigger_carrier_and_kt_silver_cashback():
+    s = state()
+    s["profile"].update(skt="VIP", kt="실버")
+    perks = sp.perks_for(s, "외식", "도미노피자 신촌", 30_000)
+    by = {k["program"]: k for k in perks}
+    assert by["SKT 멤버십"]["won"] == pytest.approx(9_000) and "더 큼" in by["SKT 멤버십"]["text"]
+    assert by["KT 멤버십"]["won"] == pytest.approx(4_500) and "하나만" in by["KT 멤버십"]["text"]
+    assert sp.perks_for(s, "외식", "", 30_000) == []                                    # 가게 이름이 없으면 없음
+    sp.import_presets(s, ["kbank-kt-double"], DAY)
+    c = s["cards"][0]
+    c.update(month_used=600_000, month="2026-10")                                          # 50만 구간: 영화외식 묶음 1만
+    st = sp.card_status(s, c, DAY)
+    assert sp.card_discount(c, st, "외식", 30_000, "파리바게뜨")[0] == pytest.approx(1_500)   # 실버 5%
+    assert sp.card_discount(c, st, "문화", 15_000, "메가박스")[0] == pytest.approx(6_000)
+    s["profile"]["kt"] = "VIP"
+    assert sp.card_discount(c, sp.card_status(s, c, DAY), "외식", 30_000, "파리바게뜨")[0] == pytest.approx(3_000)
