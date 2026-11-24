@@ -355,7 +355,11 @@ def register_routes(app: Flask) -> None:
     def stocks():
         live: dict = {}
         rows = data.watch_rows(ctx(), live)
-        return page("stocks.html", rows=rows, day=data.ref_day(ctx()), live=live)
+        return page("stocks.html", rows=rows, day=data.ref_day(ctx()), live=live, stab="mine")
+
+    @app.get("/stocks/calendar")
+    def stocks_calendar():
+        return render_template("stocks_calendar.html", nav="stocks", stab="calendar", c=data.stock_calendar(ctx()))
 
     @app.get("/stocks/<code>")
     def stock(code: str):
@@ -437,6 +441,17 @@ def register_routes(app: Flask) -> None:
         except ValueError:
             abort(404)
         return jsonify(data.news(ctx(), code, request.args.get("force") == "1"))
+
+    @app.get("/api/stock/<code>/fin")
+    def api_fin(code: str):
+        from ..analysis import fundamentals
+        from ..timeutil import now_kst
+        try:
+            code = normalize_code(code)
+        except ValueError:
+            abort(404)
+        out = fundamentals.get(ctx(), code, now_kst().date(), request.args.get("force") == "1")
+        return jsonify({k: v for k, v in out.items() if k != "_t"})
 
     @app.post("/api/apis/<api_id>/test")
     def api_test(api_id: str):

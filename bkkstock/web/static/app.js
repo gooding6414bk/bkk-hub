@@ -119,6 +119,26 @@
         ${items}<p class="muted small">출처: ${src} · ${esc((r.fetched_at || "").slice(11, 16))} 받음</p>`;
     } catch (err) { el.innerHTML = `<p class="err small">${esc(err.message)}</p>`; }
   }
+  // ---------- 재무·배당 (OpenDART, 펼칠 때 아니라 화면 열 때 한 번) ----------
+  const eokTxt = (v) => (v === null || v === undefined) ? "–" : (Math.abs(v) >= 1e12 ? `${(v / 1e12).toFixed(1)}조` : `${Math.round(v / 1e8).toLocaleString()}억`);
+  const pctTxt = (v, d = 0) => (v === null || v === undefined) ? "–" : `${v.toFixed(d)}%`;
+  async function loadFin() {
+    const el = $("#fin"), dv = $("#divs");
+    if (!el) return;
+    try {
+      const r = await call("GET", `/api/stock/${el.dataset.code}/fin`);
+      if (r.error) { el.innerHTML = `<p class="empty">${esc(r.error)}</p>`; dv.innerHTML = '<p class="empty">–</p>'; return; }
+      const warns = (r.warns || []).map((w) => `<span class="chip warn">⚠ ${esc(w)}</span>`).join(" ");
+      const rows = r.years.map((y) => `<tr><td>${y.year}</td><td class="num">${eokTxt(y.sales)}</td><td class="num">${eokTxt(y.op)}</td><td class="num">${eokTxt(y.net)}</td><td class="num">${pctTxt(y.margin)}</td><td class="num">${pctTxt(y.debt)}</td><td class="num">${pctTxt(y.roe)}</td></tr>`).join("");
+      const ytd = r.ytd ? `<p class="small">${esc(r.ytd.label)}: 매출 ${eokTxt((r.ytd.sales || [])[1])} (작년 같은 기간 ${eokTxt((r.ytd.sales || [])[0])}) · 영업이익 ${eokTxt((r.ytd.op || [])[1])} (${eokTxt((r.ytd.op || [])[0])})</p>` : "";
+      el.innerHTML = `<p class="small"><b>${esc(r.summary || "")}</b> ${warns}</p>
+        <div class="tbl-wrap"><table class="tbl compact fin-tbl"><thead><tr><th>연도</th><th class="r">매출</th><th class="r">영업이익</th><th class="r">순이익</th><th class="r">영업이익률</th><th class="r">부채비율</th><th class="r">ROE</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ${ytd}<p class="muted small">${esc(r.fs || "")} 재무 · ${r.demo ? "샘플" : "받은 날 " + esc(r.fetched || "")}${r.stale_error ? " · 새로 받기 실패: " + esc(r.stale_error) : ""}</p>`;
+      const d = (r.div || []).filter((x) => x.dps !== null || x.payout !== null);
+      dv.innerHTML = d.length ? `<div class="tbl-wrap"><table class="tbl compact"><thead><tr><th>연도</th><th class="r">주당 배당금</th><th class="r">배당성향</th><th class="r">배당수익률</th></tr></thead><tbody>${d.map((x) => `<tr><td>${x.year}</td><td class="num">${x.dps === null ? "–" : x.dps.toLocaleString() + "원"}</td><td class="num">${pctTxt(x.payout, 1)}</td><td class="num">${pctTxt(x.yield, 2)}</td></tr>`).join("")}</tbody></table></div><p class="muted small">배당성향 = 순이익 중 배당으로 준 비율. 배당수익률은 그해 기준 주가 대비.</p>` : '<p class="empty">배당 기록이 없습니다.</p>';
+    } catch (err) { el.innerHTML = `<p class="err small">${esc(err.message)}</p>`; }
+  }
+  if ($("#fin")) loadFin();
   if ($("#news")) loadNews(false);
   $("#news-reload")?.addEventListener("click", () => loadNews(true));
 

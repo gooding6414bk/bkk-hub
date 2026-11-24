@@ -402,3 +402,16 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 .move-form label.chk { flex-direction: row; align-items: flex-start; gap: 8px; margin: 8px 0; }
 .move-form button { margin-top: 12px; width: 100%; }
 @media (min-width: 900px) { .move-form .grid-f { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* 종목 화면: 바로 가기 칩 · 지표 한 줄 */
+.sec-chips { position: sticky; top: 52px; z-index: 5; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 6px 2px; background: var(--bg); }
+.sec-chips::-webkit-scrollbar { display: none; }
+.sec-chips a { flex: none; padding: 8px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--fg); font-size: .86rem; font-weight: 600; }
+.sec-chips a:hover { text-decoration: none; }
+.sec-chips .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--block); vertical-align: middle; }
+section[id^="s-"], #forecast { scroll-margin-top: 110px; }
+.ind-line { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.ind-line em { font-style: normal; color: var(--muted); margin-right: 3px; }
+.fin-tbl td, .fin-tbl th { white-space: nowrap; }
+@media (max-width: 700px) { .sec-chips { top: 50px; } }
+.ktabs2 { grid-template-columns: 1fr 1fr !important; }

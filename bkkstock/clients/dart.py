@@ -87,6 +87,33 @@ class DartClient:
             page += 1
         return out
 
+    def _report(self, path: str, corp_code: str, year: int, reprt: str) -> list[dict]:
+        """정기보고서 기반 API(주요계정·배당 등). 자료 없음(013)이면 []."""
+        params = {"crtfc_key": self._key(), "corp_code": corp_code, "bsns_year": str(year), "reprt_code": reprt}
+        try:
+            r = self.http.get(f"{BASE_URL}/{path}", params=params)
+            body = r.json()
+        except (httpx.HTTPError, ValueError) as e:
+            self.store.api_mark(self.api, False, f"{path} 연결 오류 {e}")
+            raise ApiError(self.api, "network", str(e), retryable=True) from e
+        status = str(body.get("status", ""))
+        if status == NO_DATA:
+            return []
+        if status != OK:
+            msg = body.get("message") or STATUS_TEXT.get(status, "")
+            self.store.api_mark(self.api, False, f"{path} {status} {msg}")
+            raise ApiError(self.api, status, msg, retryable=status in (RATE, "800"))
+        self.store.api_mark(self.api, True)
+        return body.get("list") or []
+
+    def major_accounts(self, corp_code: str, year: int, reprt: str = "11011") -> list[dict]:
+        """단일회사 주요계정 (매출·영업이익·순이익·자산·부채·자본). reprt: 11011 사업, 11012 반기, 11013 1분기, 11014 3분기."""
+        return self._report("fnlttSinglAcnt.json", corp_code, year, reprt)
+
+    def dividends(self, corp_code: str, year: int, reprt: str = "11011") -> list[dict]:
+        """배당에 관한 사항 (주당 배당금·배당성향·배당수익률, 당기·전기·전전기)."""
+        return self._report("alotMatter.json", corp_code, year, reprt)
+
     def corp_codes(self) -> list[dict]:
         r = self.http.get(f"{BASE_URL}/corpCode.xml", params={"crtfc_key": self._key()}, timeout=120)
         if r.status_code != 200 or not r.content.startswith(b"PK"):

@@ -19,6 +19,15 @@
       {% if s.live_on %}<br><span class="t-warn small">현재가를 받지 못해 종가로 보입니다{% if s.live_error %} ({{ s.live_error }}){% endif %}. <a href="" class="pill">↻ 새로고침</a></span>{% endif %}
       <br><span class="muted small">{{ s.px.date }} 종가 · 거래대금 {{ s.px.value | eok }}{% if s.px.nxt_share %} (NXT {{ '%.0f' % s.px.nxt_share }}%){% endif %}{% if s.px.mktcap %} · 시총 {{ s.px.mktcap | eok }}{% endif %}</span>
       {% else %}<span class="muted">시세 이력이 아직 없습니다.</span>{% endif %}</p>
+    {% set ind = s.ind %}
+    {% if ind %}<div class="ind-line small">
+      <span><em>PER</em> {{ ('%.1f' % ind.per) if ind.per else '–' }}</span>
+      <span><em>PBR</em> {{ ('%.2f' % ind.pbr) if ind.pbr else '–' }}</span>
+      {% if ind.frgn_rate is not none %}<span><em>외국인 보유</em> {{ '%.1f' % ind.frgn_rate }}%</span>{% endif %}
+      {% if ind.sector %}<span><em>업종</em> {{ ind.sector }}</span>{% endif %}
+      {% if ind.w52_pos is defined %}<span class="yrpos" title="최저 {{ ind.w52_lo | num }} · 최고 {{ ind.w52_hi | num }}"><em>{{ '52주' if not ind.w52_days else '%d일' % ind.w52_days }}</em> <span class="bar"><i style="left: {{ '%.0f' % ind.w52_pos }}%"></i></span></span>{% endif %}
+    </div>
+    {% if s.live_on and not ind.per %}<p class="muted small">PER·PBR·업종은 현재가를 받으면 같이 보입니다.</p>{% endif %}{% endif %}
   </div>
   <div class="head-right">
     {% if o %}{{ m.grade(o.score, o.blocked, o.enough_history) }}{% else %}{{ m.grade(none, False, False) }}{% endif %}
@@ -31,7 +40,13 @@
   {% if s.watch %}<p class="memo small">📝 {{ s.watch.memo or ('산 이유·언제 팔지를 주식 관리에서 메모해 두세요' if s.watch.kind == '보유' else '메모 없음') }}</p>{% endif %}
 </section>
 
-<section class="card">
+{% set has_risk = s.block_flags or s.warn_flags or s.risk_disc %}
+<nav class="sec-chips" aria-label="종목 화면 바로 가기">
+  <a href="#s-risk">위험{% if has_risk %} <i class="dot"></i>{% endif %}</a><a href="#s-chart">차트</a><a href="#s-flow">수급</a>
+  <a href="#s-fin">재무</a><a href="#s-div">배당</a><a href="#s-news">뉴스</a><a href="#s-disc">공시</a><a href="#forecast">예측</a>
+</nav>
+
+<section class="card" id="s-risk">
   <div class="card-head"><h2>위험 표시 · 점수 근거</h2><span class="muted small">참고 점수는 1개월 남짓 기울기 · 검증 전</span></div>
   {% if s.flags %}<ul class="flaglist">{% for f in s.flags %}<li class="{{ f.level }}">{% if f.level in ('block', 'warn') %}{{ m.chip(f) }}{% else %}<span class="chip info">ℹ {{ f.kind }}</span>{% endif %} {{ f.text }}</li>{% endfor %}</ul>
   {% else %}<p class="muted small">{{ '회피 엔진이 찾은 위험이 없습니다.' if o else '점수 계산 전이라 판정하지 못했습니다.' }}</p>{% endif %}
@@ -45,7 +60,7 @@
   </details>
 </section>
 
-<section class="card">
+<section class="card" id="s-chart">
   <div class="card-head"><h2>차트 <span class="muted small">{{ st.days or 0 }}거래일 · 수정주가</span></h2>
     <div class="ma-legend"><span><i style="background:#f59e0b"></i>5일</span><span><i style="background:#8b5cf6"></i>20일</span><span><i style="background:#10b981"></i>60일 이동평균</span><span><i style="background:var(--c-vol)"></i>거래대금</span><span><i style="background:var(--c-nxt)"></i>NXT</span><span><i class="dotm"></i>재료 없는 급등</span></div></div>
   <div class="chart-wrap">{{ s.chart | safe }}</div>
@@ -62,7 +77,7 @@
   </details>
 </section>
 
-<section class="card">
+<section class="card" id="s-flow">
   <div class="card-head"><h2>수급</h2><span class="muted small">{% if s.flow %}KRX+NXT 통합 · {{ s.flow.days }}거래일 자료{% endif %}</span></div>
   {% if s.flow %}
   {% set fl = s.flow %}
@@ -89,13 +104,24 @@
   {% endif %}
 </section>
 
-<section class="card">
+<section class="card" id="s-fin">
+  <div class="card-head"><h2>재무</h2><span class="muted small">OpenDART 사업보고서 · 확정 실적만</span></div>
+  <div id="fin" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
+  <p class="caveat">증권사 추정치·목표가는 넣지 않습니다(보드 원칙). 은행·보험은 매출 계정이 달라 일부 칸이 빕니다.</p>
+</section>
+
+<section class="card" id="s-div">
+  <div class="card-head"><h2>배당</h2><span class="muted small">보통주 · 사업보고서 기준</span></div>
+  <div id="divs"><p class="muted">불러오는 중…</p></div>
+</section>
+
+<section class="card" id="s-news">
   <div class="card-head"><h2>뉴스</h2><button class="ghost" id="news-reload" data-code="{{ s.code }}">새로 받기</button></div>
   <div id="news" data-code="{{ s.code }}"><p class="muted">불러오는 중…</p></div>
   <p class="caveat">제목 단어로 호재·악재를 나눕니다(근거 단어 표시, 틀릴 수 있음). 같은 소식은 묶어서 셉니다. 뉴스는 대개 이미 가격에 반영돼 있어 참고 점수에는 넣지 않습니다.</p>
 </section>
 
-<section class="card">
+<section class="card" id="s-disc">
   <div class="card-head"><h2>공시</h2><a class="pill" href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm={{ s.name | urlencode }}" target="_blank" rel="noopener">DART에서 보기</a></div>
   {% if s.disc_sum.n %}
   <p class="small">최근 공시 {{ s.disc_sum.n }}건 · {% for b in s.disc_bar %}{{ b.label }} {{ '%.0f' % b.pct }}%{% if not loop.last %} · {% endif %}{% endfor %}{% if s.disc_sum.tags %} · {% for t, k in s.disc_sum.tags[:5] %}{{ t }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</p>

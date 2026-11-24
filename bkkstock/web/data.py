@@ -114,7 +114,12 @@ def _quote(out: dict, at: dt.datetime, market: str = "UN") -> dict | None:
     return {"price": price, "change_pct": _num(out.get("prdy_ctrt")), "change": _num(out.get("prdy_vrss")),
             "open": _num(out.get("stck_oprc")), "high": _num(out.get("stck_hgpr")), "low": _num(out.get("stck_lwpr")),
             "volume": _num(out.get("acml_vol")), "value": _num(out.get("acml_tr_pbmn")),
-            "at": at.strftime("%m/%d %H:%M:%S"), "src": "KRX+넥스트레이드" if market == "UN" else "KRX"}
+            "at": at.strftime("%m/%d %H:%M:%S"), "src": "KRX+넥스트레이드" if market == "UN" else "KRX",
+            # 같은 응답에 오는 지표 (추가 호출 없음)
+            "per": _num(out.get("per")), "pbr": _num(out.get("pbr")), "eps": _num(out.get("eps")), "bps": _num(out.get("bps")),
+            "w52_hi": _num(out.get("w52_hgpr")), "w52_lo": _num(out.get("w52_lwpr")),
+            "sector": (out.get("bstp_kor_isnm") or "").strip(), "frgn_rate": _num(out.get("hts_frgn_ehrt")),
+            "mktcap_eok": _num(out.get("hts_avls"))}
 
 
 def live_quotes(ctx: Ctx, codes: list[str]) -> dict:
@@ -614,6 +619,7 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
     q = live["quotes"].get(code)
     if q:
         chg_won = q["change"]
+    ind = _indicator_line(ctx, code, day, q, last_px)
     return {"code": code, "name": name, "day": day, "o": o, "flags": flags, "blocked": blocked,
             "block_flags": [f for f in flags if f["level"] == "block"], "warn_flags": [f for f in flags if f["level"] == "warn"],
             "risk_disc": risk_disc, "fc_state": fc_state, "chg_won": chg_won,
@@ -623,7 +629,61 @@ def stock_detail(ctx: Ctx, code: str) -> dict:
             "discs": discs[:25], "disc_sum": disc_sum, "disc_bar": charts.tone_bar(disc_sum["ratio"]),
             "score_spark": charts.sparkline(hist_scores, 160, 36), "n_score_days": len(hist_scores), "comps": comps,
             "watch": watch, "model": outlook.MODEL_VERSION, "fc": fc, "fc_model": fcmod.MODEL_VERSION,
-            "live": q, "live_on": live["on"], "live_error": live["error"]}
+            "live": q, "live_on": live["on"], "live_error": live["error"], "ind": ind}
+
+
+SCHEDULE_TAGS = (("주주총회", "주총"), ("배당", "배당"), ("유상증자", "증자"), ("무상증자", "증자"), ("보호예수", "보호예수"),
+                 ("전환사채", "CB"), ("신주인수권", "BW"), ("영업(잠정)실적", "실적"), ("잠정실적", "실적"),
+                 ("분기보고서", "실적"), ("반기보고서", "실적"), ("사업보고서", "실적"), ("기업설명회", "IR"),
+                 ("주식분할", "액면"), ("주식병합", "액면"), ("자기주식", "자사주"))
+
+
+def stock_calendar(ctx: Ctx) -> dict:
+    """📈 주식 > 일정: 시장 일정 + 정기보고서 법정 마감(12월 결산 기준) + 내 종목 최근 60일 일정성 공시."""
+    from ..analysis import macro as macromod
+    today = now_kst().date()
+    events = macromod.upcoming_events(today, 6)
+    deadlines = []
+    for m, d, label in ((3, 31, "사업보고서 (작년 1년 실적·배당)"), (5, 15, "1분기 보고서"), (8, 14, "반기 보고서"), (11, 14, "3분기 보고서")):
+        for y in (today.year, today.year + 1):
+            dd = dt.date(y, m, d)
+            if dd >= today:
+                deadlines.append({"date": dd, "label": label, "dday": (dd - today).days})
+                break
+    deadlines.sort(key=lambda x: x["date"])
+    watch = ctx.store.watchlist()
+    names = {w["code"]: w["name"] or w["code"] for w in watch}
+    items = []
+    if watch:
+        since = (today - dt.timedelta(days=60)).strftime("%Y%m%d")
+        qs = ",".join("?" * len(watch))
+        for r in ctx.store.query(f"SELECT stock_code, report_nm, rcept_no, rcept_dt FROM disclosures WHERE stock_code IN ({qs}) "
+                                 f"AND rcept_dt>=? ORDER BY rcept_dt DESC", [w["code"] for w in watch] + [since]):
+            tag = next((t for word, t in SCHEDULE_TAGS if word in (r["report_nm"] or "")), None)
+            if tag:
+                items.append({**r, "tag": tag, "name": names.get(r["stock_code"], r["stock_code"])})
+    return {"today": today, "events": events, "deadlines": deadlines[:4], "rows": items[:40], "n_watch": len(watch)}
+
+
+def _indicator_line(ctx: Ctx, code: str, day, q: dict | None, last_px: dict) -> dict:
+    """요약 지표 한 줄: 한국투자증권 현재가 응답의 PER·PBR·52주·업종·외국인 소진율. 없으면 KRX 시세로 52주만."""
+    out = {"per": None, "pbr": None, "w52_hi": None, "w52_lo": None, "sector": "", "frgn_rate": None,
+           "mktcap": last_px.get("mktcap"), "src": "KRX"}
+    if q:
+        out.update({k: q.get(k) for k in ("per", "pbr", "w52_hi", "w52_lo", "frgn_rate")}, sector=q.get("sector") or "",
+                   src="한국투자증권")
+        if q.get("mktcap_eok"):
+            out["mktcap"] = q["mktcap_eok"] * 1e8
+    if (out["w52_hi"] is None or out["w52_lo"] is None) and day:
+        h = price_history(ctx.store, day, 250, codes=[code])
+        if not h.empty:
+            c = pd.to_numeric(h["close"], errors="coerce").dropna()
+            if len(c) >= 20:
+                out.update(w52_hi=float(c.max()), w52_lo=float(c.min()), w52_days=len(c))
+    price = (q or {}).get("price") or last_px.get("close")
+    if price and out["w52_hi"] and out["w52_lo"] and out["w52_hi"] > out["w52_lo"]:
+        out["w52_pos"] = (price - out["w52_lo"]) / (out["w52_hi"] - out["w52_lo"]) * 100
+    return out
 
 
 def _next_day(ymd: str | None) -> str:

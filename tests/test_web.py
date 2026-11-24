@@ -390,3 +390,43 @@ def test_move_calculator_saves_only_on_server(client):
     saved = json.loads(appmod.ctx().store.meta_get("move_plan"))
     assert saved["sell_price"] == 20 and saved["note"] == "우리 집"
     assert c.post("/knowledge/realestate/move", data={"sell_price": "1"}, headers={"X-CSRF": ""}).status_code == 403
+
+
+def test_stock_page_has_chips_fin_and_calendar(client, monkeypatch):
+    import datetime as dt
+    from tests.conftest import make_prices
+    from bkkstock.timeutil import trading_days_back
+    c, appmod = client
+    st = appmod.ctx().store
+    make_prices(st, trading_days_back(dt.date(2026, 11, 6), 60), ["000001", "000002"])
+    st.upsert_watch("000001", "종목000001", "보유", 10, 9000, "")
+    with st.db() as con:
+        con.execute("INSERT INTO disclosures(rcept_no, day, corp_code, corp_name, stock_code, report_nm, rcept_dt, first_seen_at, tags) "
+                    "VALUES ('9','2026-11-01','001','가','000001','주주총회소집결의',?, '2026-11-01','')", (dt.date.today().strftime("%Y%m%d"),))
+    login(c)
+    page = c.get("/stocks/000001").get_data(as_text=True)
+    for word in ('href="#s-fin"', 'id="s-fin"', 'id="s-div"', 'href="#s-risk"', "60일", "PER"):
+        assert word in page, word
+    j = c.get("/api/stock/000001/fin").get_json()
+    assert "OpenDART" in j["error"]                                           # 키 없음
+    cal = c.get("/stocks/calendar").get_data(as_text=True)
+    assert "실적 발표 마감" in cal and "주총" in cal and "⭐ 내 종목" in cal
+    assert "🗓 일정" in c.get("/stocks").get_data(as_text=True)
+
+
+def test_indicator_line_uses_kis_fields(client, monkeypatch):
+    import httpx
+    calls = []
+    base = _kis_handler(calls)
+
+    def handler(req):
+        r = base(req)
+        if req.url.path.endswith("inquire-price"):
+            body = r.json()
+            body["output"].update(per="12.34", pbr="1.10", w52_hgpr="13000", w52_lwpr="9000", bstp_kor_isnm="전기·전자",
+                                  hts_frgn_ehrt="51.2", hts_avls="7000")
+            return httpx.Response(200, json=body)
+        return r
+    c, cx, datamod = _live_setup(client, monkeypatch, handler)
+    page = c.get("/stocks/000001").get_data(as_text=True)
+    assert "12.3" in page and "1.10" in page and "전기·전자" in page and "51.2%" in page and "52주" in page
