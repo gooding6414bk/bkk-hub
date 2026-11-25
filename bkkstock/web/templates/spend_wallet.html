@@ -61,6 +61,7 @@
     </div>
     {% if c.rules %}<div class="muted small">📄 가맹점 할인 {{ c.rules | length }}개: {% for r in c.rules %}{{ r.label }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}
     {% if c.note %}<p class="muted small">📄 {{ c.note }}</p>{% endif %}
+    {% if c.setup %}<label class="chk"><input type="checkbox" name="c{{ i }}_setup" {{ 'checked' if c.setup_ok }}> <b>혜택 조건 갖춤:</b> {{ c.setup }} — 안 갖췄으면 이 카드 혜택은 0원으로 계산</label>{% endif %}
     <label class="chk"><input type="checkbox" name="c{{ i }}_fixed" {{ 'checked' if c.fixed }}> 정액 혜택 카드 (통신비 할인처럼 실적만 채우면 정해진 금액 할인)</label>
     <label class="chk"><input type="checkbox" name="c{{ i }}_prev" {{ 'checked' if c.prev_ok or not c }}> 지난달 실적 채움 (지난달 이용액을 모를 때만 씀)</label>
     {% if c %}<label class="chk"><input type="checkbox" name="c{{ i }}_del"> 이 카드 지우기</label>{% endif %}

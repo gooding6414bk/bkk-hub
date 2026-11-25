@@ -75,9 +75,10 @@
   <div class="card-head"><h2>카드 실적 · 이번 달</h2>{% if d.cards %}<span class="muted small">말일까지 {{ d.cards[0].days_left }}일</span>{% endif %}</div>
   {% if d.cards %}<ul class="list">
   {% for c in d.cards %}
-    <li><div class="opt-head"><span><span class="name">{{ c.name }}</span><span class="tag">{{ c.kind }}</span>{% if not c.prev_ok %} <span class="chip warn">지난달 미달</span>{% endif %}</span>
+    <li><div class="opt-head"><span><span class="name">{{ c.name }}</span><span class="tag">{{ c.kind }}</span>{% if not c.setup_ok %} <span class="chip block">조건 안 갖춤</span>{% elif not c.prev_ok %} <span class="chip warn">지난달 미달</span>{% endif %}</span>
       <span class="num small">{% if c.tier %}{{ won(c.used) }} / {{ man(c.tier) }}{% else %}{{ won(c.used) }} · 실적 조건 없음{% endif %}</span></div>
-      {% if c.tier %}{{ meter(c.pct, 'ok' if c.left == 0 else '') }}
+      {% if not c.setup_ok %}<div class="small t-warn">{{ c.setup }}을(를) 하지 않아 혜택이 없습니다.{% if c.fee %} 연회비 약 {{ won(c.fee) }}만 나가니 해지(남은 기간 연회비는 날짜만큼 돌려받음)나 조건 갖추기를 검토하세요.{% endif %}</div>
+      {% elif c.tier %}{{ meter(c.pct, 'ok' if c.left == 0 else '') }}
       <div class="small muted">{% if c.left %}다음 달 혜택까지 <b>{{ won(c.left) }}</b> 남음{% if c.benefit %} · 채우면 약 {{ won(c.benefit) }}{% endif %}{% else %}실적 채움 ✓{% endif %}
         {% if c.next_need and c.next_need > c.tier %} · {{ man(c.next_need) }} 넘기면 다음 달 {{ '할인' if c.fixed else '한도' }} {{ won(c.next_cap) }}{% endif %}</div>{% endif %}
       {% if c.fixed_amt is not none or c.cap is not none %}<div class="small muted">{% if c.fixed %}이번 달 받는 정액 할인 {{ won(c.fixed_amt) }}{% else %}이번 달 할인 한도 {{ won(c.cap) }} 중 {{ won(c.got) }} 받음 · <b>{{ won(c.cap_left) }}</b> 남음{% endif %}

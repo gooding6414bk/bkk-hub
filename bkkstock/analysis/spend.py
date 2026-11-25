@@ -162,6 +162,7 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
                     "prev_ok": bool(f.get(f"c{i}_prev")),                # 지난달 실적을 모를 때만 씀
                     "note": prev.get("note", ""), "preset": prev.get("preset", ""), "rules": prev.get("rules", []),
                     "group_caps": prev.get("group_caps", {}), "needs": prev.get("needs"),
+                    "setup": prev.get("setup"), "setup_ok": bool(f.get(f"c{i}_setup")), "fee": prev.get("fee"),
                     "month_used": prev.get("month_used"), "month": prev.get("month", "")}
             used = str(f.get(f"c{i}_month_used") or "").strip()
             if used:                                   # 카드 앱의 이번 달 이용액 — 다음 달엔 '지난달 실적'이 된다
@@ -200,7 +201,8 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
 
 
 def from_preset(preset: dict, state: dict, today: dt.date) -> dict:
-    keys = ("name", "kind", "base", "tier", "benefit", "bonus", "caps", "fixed", "note", "rules", "group_caps", "needs")
+    keys = ("name", "kind", "base", "tier", "benefit", "bonus", "caps", "fixed", "note", "rules", "group_caps", "needs",
+            "setup", "fee")
     return {**{k: preset.get(k, {} if k == "group_caps" else None) for k in keys}, "id": _new_id(state), "preset": preset["key"], "prev_ok": True,
             "month_used": None, "month": ""}
 
@@ -429,7 +431,7 @@ def _bonus_won(card: dict, place: str, amount: float) -> float:
 def _best(card, place, merchant, amount, prev_amt, by_rule, cnt, prof=None) -> tuple[float, int | None, str]:
     """이 결제에 붙는 추가 할인 중 가장 큰 것(원, 규칙 번호, 설명). 항목·묶음 한도와 횟수까지 — 통합 한도는 밖에서."""
     best: tuple[float, int | None, str] = (0.0, None, "")
-    if not _needs_ok(card.get("needs"), prof):
+    if not _needs_ok(card.get("needs"), prof) or (card.get("setup") and not card.get("setup_ok")):
         return best
     tier = _tier(card)
     if _eligible(card, tier, prev_amt) and _bonus_won(card, place, amount) > 0:
@@ -490,7 +492,8 @@ def card_status(state: dict, card: dict, today: dt.date) -> dict:
     if manual is not None and card.get("month") == prev:
         prev_amt = max(last, float(manual))
     prof = state["profile"]
-    ok = _needs_ok(card.get("needs"), prof)                     # 통신사 조건이 안 맞으면 카드 혜택 없음
+    setup_ok = not card.get("setup") or bool(card.get("setup_ok"))   # 자동이체 같은 조건을 갖췄다고 체크했나
+    ok = _needs_ok(card.get("needs"), prof) and setup_ok         # 조건이 안 맞으면 카드 혜택 없음
     caps, tier, fixed = (card.get("caps") or []) if ok else [], _tier(card), bool(card.get("fixed"))
     amt = _cap_for({**card, "caps": caps}, prev_amt)
     cap = None if fixed else amt
@@ -499,7 +502,7 @@ def card_status(state: dict, card: dict, today: dt.date) -> dict:
     return {"used": used, "tier": tier, "left": max(0.0, tier - used), "prev_ok": _eligible(card, tier, prev_amt),
             "prev_amt": prev_amt, "pct": min(100.0, used / tier * 100) if tier else 100.0, "fixed_amt": amt if fixed else None,
             "cap": cap, "cap_left": None if cap is None else max(0.0, cap - got), "got": got,
-            "by_rule": by_rule, "cnt": cnt, "per": per, "prof": prof, "ok": ok,
+            "by_rule": by_rule, "cnt": cnt, "per": per, "prof": prof, "ok": ok, "setup_ok": setup_ok,
             "next_need": nxt[0] if nxt else None, "next_cap": nxt[1] if nxt else None,
             "days_left": calendar.monthrange(today.year, today.month)[1] - today.day}
 

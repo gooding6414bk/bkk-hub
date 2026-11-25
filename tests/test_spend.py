@@ -166,6 +166,7 @@ def test_fixed_telco_card_from_catalog_pushes_to_tier():
     s = state()
     sp.import_presets(s, ["kb-kt-superdc7"], DAY)
     c = s["cards"][0]
+    c["setup_ok"] = True                                                                    # KT 요금 자동이체 중
     r = sp.recommend(s, "마트", 100_000, DAY)
     fill = dict((n, v) for n, v, _ in r["options"][0]["parts"])["실적 채우기"]
     assert r["options"][0]["method"] == f"c:{c['id']}" and fill == pytest.approx(15_000 * 100_000 / 300_000)
@@ -188,6 +189,7 @@ def test_skt_grade_and_kt_conditions():
     s = state()
     sp.import_presets(s, ["hana-sk-family", "kb-kt-superdc7"], DAY)
     sk, dc7 = s["cards"]
+    dc7["setup_ok"] = True
     pizza = lambda: next(o for o in sp.recommend(s, "외식", 40_000, DAY, "도미노피자")["options"] if o["method"] == f"c:{sk['id']}")
     assert pizza()["parts"][0][1] == pytest.approx(40_000 * .0027)                       # SKT 멤버십 없음 → 기본 적립만
     s["profile"]["skt"] = "VIP"
@@ -234,3 +236,15 @@ def test_point_perks_earn_and_use():
     assert not [k for k in sp.perks_for(s, "편의점", "GS25", 5_000) if k["kind"] == "사용"]   # OK캐쉬백 800점 < 1천 점
     rows = sp.point_rows(s, DAY)
     assert rows[0]["warn"] == ["소멸 47일 전"] and rows[1]["warn"] == []
+
+
+def test_card_setup_condition_turns_benefits_off_until_checked():
+    s = state()
+    sp.import_presets(s, ["kb-kt-superdc7"], DAY)
+    c = s["cards"][0]
+    st = sp.card_status(s, c, DAY)
+    assert not st["setup_ok"] and st["fixed_amt"] is None and sp.fill_value(c, st, 100_000)[0] == 0
+    c["setup_ok"] = True
+    assert sp.card_status(s, c, DAY)["fixed_amt"] == 15_000
+    f = {"salary": "5000", "c0_id": str(c["id"]), "c0_name": c["name"], "c0_kind": "신용", "c0_tier": "30", "c0_caps": "30만 1.5만"}
+    assert sp.wallet_from_form(s, f, DAY)["cards"][0]["setup_ok"] is False                  # 체크를 풀고 저장

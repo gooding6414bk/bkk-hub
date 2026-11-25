@@ -58,7 +58,7 @@ CATALOG: list[dict] = [
     {
         "key": "kb-kt-superdc7", "name": "kt super DC 7 KB국민BC카드", "kind": "신용", "base": 0.0, "bonus": {},
         "tier": 300_000, "benefit": 0.0, "fixed": True, "caps": [[300_000, 15_000], [700_000, 20_000]], "rules": [],
-        "needs": {"kt": True},
+        "needs": {"kt": True}, "setup": "KT 요금(단말 할부 포함)을 이 카드로 자동이체", "fee": 25_000,
         "note": ("KT 요금(단말 할부 포함)을 이 카드로 자동이체해야 할인. 금액은 KT 요금 7만 원 이상 기준 — 7만 원 미만이면 월 7천 원. "
                  "할인은 청구액을 넘지 않음. 신규 발급은 2019-01 중단, 갱신도 막혔을 수 있음(확인 필요). 연회비 2만 5천~2만 7천 원."),
         "summary": "정액: 전월 30만 원이면 KT 요금 1만 5천 원, 70만 원이면 2만 원 할인",
@@ -123,7 +123,7 @@ CATALOG: list[dict] = [
         "src": "https://www.kbanknow.com/web/product/card/one-card", "checked": "2026-11-25",
     },
     {
-        "key": "hana-sk-family", "name": "하나 SK패밀리카드(스마트라이프)", "kind": "신용", "base": 0.27, "bonus": {},
+        "key": "hana-sk-family", "name": "하나 SK패밀리카드(스마트라이프)", "kind": "신용", "base": 0.27, "bonus": {}, "fee": 100_000,
         "tier": 200_000, "benefit": 0.0, "fixed": False, "caps": [],
         "rules": [
             {"label": "SK주유소 리터당 120원(약 6.5%, 직영 150원)", "places": ["주유"], "match": ["SK", "엔크린"], "rate": 6.5, "upto": 200_000},
