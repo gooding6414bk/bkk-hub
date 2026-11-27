@@ -262,3 +262,11 @@ def test_local_vouchers_by_region_and_own_rate():
     assert labels["지역사랑상품권 (하남)"]["parts"][0][1] == pytest.approx(2_000)              # 비우면 기본 10%
     only = [o["label"] for o in sp.recommend(s, "동네", 20_000, DAY, area="하남")["options"] if "지역사랑" in o["label"]]
     assert only == ["지역사랑상품권 (하남)"]
+
+
+def test_kpass_card_wins_transit():
+    s = state()
+    sp.import_presets(s, ["kb-nori-rf", "kbank-one-all"], DAY)
+    s["cards"][0].update(month_used=600_000, month="2026-10")                                # 노리 교통 10% 조건(30만) 충족
+    r = sp.recommend(s, "교통", 1_500, DAY)
+    assert r["options"][0]["method"] == f"c:{s['cards'][1]['id']}"                            # K-패스 20% > 노리 10%
