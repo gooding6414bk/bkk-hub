@@ -181,8 +181,11 @@ def wallet_from_form(state: dict, f, today: dt.date) -> dict:
                 exp = dt.date.fromisoformat(exp).isoformat() if exp else ""
             except ValueError:
                 exp = ""
+            rate = str(f.get(f"v{i}_rate") or "").strip()
             vouchers.append({"id": int(num(f.get(f"v{i}_id"))) or _new_id(state), "kind": kind, "name": name,
-                             "balance": num(f.get(f"v{i}_balance")), "exp": exp})
+                             "balance": num(f.get(f"v{i}_balance")), "exp": exp,
+                             "region": str(f.get(f"v{i}_region") or "").strip()[:20],       # 지역사랑: 쓸 수 있는 지역(서울·하남 등)
+                             "rate": min(30.0, num(rate)) if rate else None})            # 이 상품권 할인율(비우면 기본값)
         i += 1
     points, i = [], 0
     while f"p{i}_kind" in f:
@@ -548,14 +551,31 @@ def brand_words(state: dict) -> list[str]:
     return out
 
 
-def _live_vouchers(state, kind, today):
+def _live_vouchers(state, kind, today, area: str = ""):
+    """쓸 수 있는 상품권(만료 안 됨, 잔액 있음). 지역을 고르면 그 지역 상품권만(지역을 안 적은 상품권은 어디서나)."""
     vs = [v for v in state["vouchers"] if v["kind"] == kind and v["balance"] > 0
-          and not (v.get("exp") and v["exp"] < today.isoformat())]
+          and not (v.get("exp") and v["exp"] < today.isoformat())
+          and (not area or not v.get("region") or v["region"] in area or area in v["region"])]
     return sorted(vs, key=lambda v: v.get("exp") or "9999")          # 만료가 가까운 것부터 쓴다
 
 
+def voucher_rate(state: dict, v: dict) -> float:
+    if v.get("rate") is not None:
+        return float(v["rate"])
+    return float(state["profile"].get({"온누리": "onnuri", "지역사랑": "local"}.get(v["kind"], ""), 0) or 0)
+
+
+def regions(state: dict) -> list[str]:
+    """결제 추천의 '어느 지역' 칸: 내 지역사랑상품권에 적힌 지역."""
+    out: list[str] = []
+    for v in state["vouchers"]:
+        if v["kind"] == "지역사랑" and v.get("region") and v["region"] not in out:
+            out.append(v["region"])
+    return out
+
+
 # ---------------- 추천 ----------------
-def recommend(state: dict, place: str, amount: float, today: dt.date, merchant: str = "") -> dict:
+def recommend(state: dict, place: str, amount: float, today: dt.date, merchant: str = "", area: str = "") -> dict:
     p = state["profile"]
     salary, children = float(p.get("salary") or 0), int(p.get("children") or 0)
     t = marginal_rate(p) if salary else 0.0
@@ -585,27 +605,29 @@ def recommend(state: dict, place: str, amount: float, today: dt.date, merchant: 
         opts.append(option(f"{c['name']} ({c['kind']})", f"c:{c['id']}", [
             ("카드 할인·적립", disc, why), ("실적 채우기", fill, fill_why),
             ("공제로 돌아오는 세금", tax(grp, amount), GROUP_NAMES.get(grp, ""))], note))
-    for kind, rate in (("온누리", p.get("onnuri", ONNURI_RATE)), ("지역사랑", p.get("local", LOCAL_RATE))):
+    for kind in ("온누리", "지역사랑"):
         if kind not in PLACE.get(place, PLACE["기타"])[2]:
             continue
-        vs = _live_vouchers(state, kind, today)
-        bal = sum(v["balance"] for v in vs)
-        if not bal:
-            continue
-        use = min(amount, bal)
-        notes = [] if (place, kind) == ("시장", "온누리") else ["가맹점인지 확인하세요"]
-        if use < amount:
-            notes.append(f"잔액 {bal:,.0f}원 — 나머지 {amount - use:,.0f}원은 다른 수단으로")
-        opts.append(option(f"{kind}상품권", f"v:{vs[0]['id']}", [
-            ("상품권 할인", use * float(rate) / 100, f"{float(rate):g}%"),
-            ("공제로 돌아오는 세금", tax(group_of(place, kind, salary), use), "")], " · ".join(notes), use))
+        groups: dict = {}                                    # 지역사랑은 지역마다 따로(서울·하남 상품권은 서로 못 씀)
+        for v in _live_vouchers(state, kind, today, area):
+            groups.setdefault(v.get("region", "") if kind == "지역사랑" else "", []).append(v)
+        for region, vs in groups.items():
+            bal = sum(v["balance"] for v in vs)
+            rate = voucher_rate(state, vs[0])
+            use = min(amount, bal)
+            notes = [] if (place, kind) == ("시장", "온누리") else [f"{region} 가맹점인지 확인하세요" if region else "가맹점인지 확인하세요"]
+            if use < amount:
+                notes.append(f"잔액 {bal:,.0f}원 — 나머지 {amount - use:,.0f}원은 다른 수단으로")
+            opts.append(option(f"{kind}상품권" + (f" ({region})" if region else ""), f"v:{vs[0]['id']}", [
+                ("상품권 할인", use * rate / 100, f"{rate:g}%"),
+                ("공제로 돌아오는 세금", tax(group_of(place, kind, salary), use), "")], " · ".join(notes), use))
     opts.append(option("현금·계좌이체 (현금영수증)", "cash", [
         ("공제로 돌아오는 세금", tax(group_of(place, "현금", salary), amount), "")]))
     opts.sort(key=lambda o: (-o["pct"], -o["value"]))
     hint = bool(not merchant and any(r.get("match") for c in state["cards"] for r in c.get("rules") or []))
     perks = perks_for(state, place, merchant, amount)
     return {"place": place, "place_name": PLACE.get(place, PLACE["기타"])[0], "amount": amount, "options": opts,
-            "merchant": merchant, "hint": hint, "perks": perks,
+            "merchant": merchant, "hint": hint, "perks": perks, "area": area,
             "rate": t, "advice": advice(proj, deduction(proj, salary, children) if salary else None, t)}
 
 
@@ -653,8 +675,8 @@ def benefit_of(state: dict, r: dict, today: dt.date) -> float:
             return base + st["per"][r["id"]]
         return base + _best(c, r.get("place"), r.get("memo", ""), amt, st["prev_amt"], {}, {}, st["prof"])[0]   # 지난 기록: 한도 전 어림
     if kind == "v" and _voucher(state, rid):
-        rate = {"온누리": "onnuri", "지역사랑": "local"}.get(_voucher(state, rid)["kind"])
-        return amt * float(state["profile"].get(rate, 0)) / 100 if rate else 0.0
+        v = _voucher(state, rid)
+        return amt * voucher_rate(state, v) / 100 if v["kind"] in ("온누리", "지역사랑") else 0.0
     return 0.0
 
 

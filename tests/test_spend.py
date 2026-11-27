@@ -248,3 +248,17 @@ def test_card_setup_condition_turns_benefits_off_until_checked():
     assert sp.card_status(s, c, DAY)["fixed_amt"] == 15_000
     f = {"salary": "5000", "c0_id": str(c["id"]), "c0_name": c["name"], "c0_kind": "신용", "c0_tier": "30", "c0_caps": "30만 1.5만"}
     assert sp.wallet_from_form(s, f, DAY)["cards"][0]["setup_ok"] is False                  # 체크를 풀고 저장
+
+
+def test_local_vouchers_by_region_and_own_rate():
+    s = state()
+    f = {"salary": "5000", "local": "10", "v0_id": "", "v0_name": "서울사랑", "v0_kind": "지역사랑", "v0_balance": "100000",
+         "v0_region": "서울", "v0_rate": "7", "v1_id": "", "v1_name": "하남", "v1_kind": "지역사랑", "v1_balance": "50000",
+         "v1_region": "하남", "v1_rate": ""}
+    s = sp.wallet_from_form(s, f, DAY)
+    assert sp.regions(s) == ["서울", "하남"]
+    labels = {o["label"]: o for o in sp.recommend(s, "동네", 20_000, DAY)["options"]}
+    assert labels["지역사랑상품권 (서울)"]["parts"][0][1] == pytest.approx(1_400)              # 이 상품권 7%
+    assert labels["지역사랑상품권 (하남)"]["parts"][0][1] == pytest.approx(2_000)              # 비우면 기본 10%
+    only = [o["label"] for o in sp.recommend(s, "동네", 20_000, DAY, area="하남")["options"] if "지역사랑" in o["label"]]
+    assert only == ["지역사랑상품권 (하남)"]

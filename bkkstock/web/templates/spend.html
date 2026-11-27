@@ -14,6 +14,7 @@
     <label>어디서 <select name="place">{% for k, name, g, vs in places %}<option value="{{ k }}" {{ 'selected' if q.place == k }}>{{ name }}</option>{% endfor %}</select></label>
     <label>얼마 (원) <input name="amount" inputmode="numeric" value="{{ q.amount }}" placeholder="예: 32000" required></label>
     <label>가게 이름 (선택) <input name="shop" list="shops" value="{{ q.shop }}" maxlength="40" placeholder="예: 스타벅스, GS25, CGV"></label>
+    {% if regions %}<label>어느 지역 가게 <select name="area"><option value="">모름</option>{% for r in regions %}<option {{ 'selected' if q.area == r }}>{{ r }}</option>{% endfor %}</select></label>{% endif %}
   </div>
   <button type="submit">추천 보기</button>
 </form>{{ shop_list() }}
@@ -34,7 +35,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="home">
     <input type="hidden" name="place" value="{{ rec.place }}"><input type="hidden" name="amount" value="{{ '%.0f' % rec.amount }}">
     <input type="hidden" name="method" value="{{ rec.options[0].method }}"><input type="hidden" name="date" value="{{ today }}">
-    <input type="hidden" name="memo" value="{{ rec.merchant }}">
+    <input type="hidden" name="memo" value="{{ rec.merchant }}"><input type="hidden" name="area" value="{{ rec.area }}">
     <button type="submit">1순위로 냈어요 — 기록</button><a class="pill" href="/spend/records?place={{ rec.place }}&amount={{ '%.0f' % rec.amount }}&shop={{ rec.merchant | urlencode }}">다른 수단으로 기록</a>
   </form>
   {% if rec.perks %}<div class="perks"><b class="small">결제 전에 챙길 것 (어느 카드로 내든)</b><ul class="small">
@@ -96,7 +97,7 @@
   {% if d.vouchers %}<ul class="list">
   {% for v in d.vouchers %}
     <li><div class="opt-head"><span><span class="name">{{ v.name }}</span><span class="tag">{{ v.kind }}</span></span><b class="num">{{ won(v.balance) }}</b></div>
-      <div class="small muted">{% if v.exp %}유효기간 {{ v.exp }}{% else %}유효기간 안 넣음{% endif %}{% for w in v.warn %} · <span class="t-warn">{{ w }}</span>{% endfor %}</div></li>
+      <div class="small muted">{% if v.region %}{{ v.region }} · {% endif %}{% if v.exp %}유효기간 {{ v.exp }}{% else %}유효기간 안 넣음{% endif %}{% for w in v.warn %} · <span class="t-warn">{{ w }}</span>{% endfor %}</div></li>
   {% endfor %}</ul>
   <p class="muted small">디지털 온누리는 60% 이상 쓰면 남은 돈을 돌려받을 수 있습니다(할인받은 몫은 빼고).</p>
   {% else %}<p class="empty">등록한 상품권이 없습니다.</p>{% endif %}

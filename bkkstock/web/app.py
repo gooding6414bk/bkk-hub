@@ -451,9 +451,11 @@ def register_routes(app: Flask) -> None:
         today = now_kst().date()
         place, amount = request.args.get("place", ""), sp.num(request.args.get("amount"))
         shop = (request.args.get("shop") or "").strip()[:40]
-        rec = sp.recommend(state, place, amount, today, shop) if place in sp.PLACE and amount > 0 else None
+        area = (request.args.get("area") or "").strip()[:20]
+        rec = sp.recommend(state, place, amount, today, shop, area) if place in sp.PLACE and amount > 0 else None
         return spend_page("spend.html", "home", sp, state, d=sp.dashboard(state, today), rec=rec,
-                          q={"place": place or "동네", "amount": request.args.get("amount", ""), "shop": shop})
+                          q={"place": place or "동네", "amount": request.args.get("amount", ""), "shop": shop, "area": area},
+                          regions=sp.regions(state))
 
     @app.route("/spend/wallet", methods=["GET", "POST"])
     def spend_wallet():

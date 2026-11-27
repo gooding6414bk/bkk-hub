@@ -80,6 +80,8 @@
       <label>종류 <select name="v{{ i }}_kind">{% for k in kinds %}<option {{ 'selected' if v.kind == k }}>{{ k }}</option>{% endfor %}</select></label>
       <label>잔액 (원) <input name="v{{ i }}_balance" inputmode="numeric" value="{{ '%.0f' % v.balance if v.balance else '' }}"></label>
       <label>유효기간 <input type="date" name="v{{ i }}_exp" value="{{ v.exp or '' }}"></label>
+      <label>지역 (지역사랑상품권) <input name="v{{ i }}_region" value="{{ v.region or '' }}" maxlength="20" placeholder="예: 서울, 하남"></label>
+      <label>할인율 (%, 비우면 기본값) <input name="v{{ i }}_rate" inputmode="decimal" value="{{ v.rate if v.rate is not none and v.rate is defined else '' }}"></label>
     </div>
     {% if v %}<label class="chk"><input type="checkbox" name="v{{ i }}_del"> 이 상품권 지우기</label>{% endif %}
   </fieldset>
