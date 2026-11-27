@@ -1,0 +1,17 @@
+{% macro won(v) -%}{{ '{:,.0f}'.format(v or 0) }}원{%- endmacro %}
+{% macro man(v) -%}{{ '{:,.0f}'.format((v or 0) / 10000) }}만 원{%- endmacro %}
+{% macro meter(pct, cls='') -%}<div class="meter"><i class="{{ cls }}" style="--w:{{ '%.1f' % ([[pct, 0]|max, 100]|min) }}%"></i></div>{%- endmacro %}
+{% macro shop_list() -%}<datalist id="shops">{% for w in brands %}<option value="{{ w }}">{% endfor %}</datalist>{%- endmacro %}
+{% macro record_form(places, methods, today, back='', place='동네', amount='', method='', shop='') -%}
+<form method="post" action="/spend/records" class="spend-form" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+  <div class="grid-f">
+    <label>날짜 <input type="date" name="date" value="{{ today }}"></label>
+    <label>금액 (원) <input name="amount" inputmode="numeric" value="{{ amount }}" placeholder="예: 32000" required></label>
+    <label>어디서 <select name="place">{% for k, name, g, vs in places %}<option value="{{ k }}" {{ 'selected' if k == place }}>{{ name }}</option>{% endfor %}</select></label>
+    <label>무엇으로 <select name="method">{% for v, name in methods %}<option value="{{ v }}" {{ 'selected' if v == method }}>{{ name }}</option>{% endfor %}</select></label>
+    <label>가게 이름 (가맹점 할인 계산에 씀) <input name="memo" maxlength="40" list="shops" value="{{ shop }}" placeholder="예: 스타벅스"></label>
+  </div>
+  <button type="submit">기록하기</button>
+</form>{{ shop_list() }}
+{%- endmacro %}

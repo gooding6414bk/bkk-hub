@@ -396,12 +396,28 @@ details.sub-fold > summary { cursor: pointer; font-weight: 600; font-size: .9rem
 .mk-grid .cell.stale b { color: var(--muted); }
 @media (min-width: 900px) { .mk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 /* 🏡 갈아타기 계산 */
-.move-form label { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; }
-.move-form input:not([type=checkbox]) { width: 100%; }
-.move-form .grid-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 8px 0; }
-.move-form label.chk { flex-direction: row; align-items: flex-start; gap: 8px; margin: 8px 0; }
-.move-form button { margin-top: 12px; width: 100%; }
-@media (min-width: 900px) { .move-form .grid-f { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.move-form label, .spend-form label { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; }
+.move-form input:not([type=checkbox]), .spend-form input:not([type=checkbox]), .spend-form select { width: 100%; }
+.move-form .grid-f, .spend-form .grid-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 8px 0; }
+.move-form label.chk, .spend-form label.chk { flex-direction: row; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.move-form button, .spend-form button[type=submit] { margin-top: 12px; width: 100%; }
+@media (min-width: 900px) { .move-form .grid-f, .spend-form .grid-f { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* 💳 소비 */
+.meter { height: 10px; background: var(--soft); border-radius: 5px; overflow: hidden; margin: 6px 0 4px; }
+.meter i { display: block; height: 100%; width: var(--w); background: var(--accent); border-radius: 5px; }
+.meter i.ok { background: var(--good); } .meter i.warn { background: var(--warn); }
+.opts { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opts li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.opts li.best { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.opts li.rest { opacity: .75; }
+.opt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.spend-form label.chk input { width: auto; flex: none; margin-top: 2px; }
+.spend-form fieldset.box { border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px 8px; margin: 10px 0; min-width: 0; }
+form.inline { display: inline; margin: 0; }
+.perks { background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
+.perks ul { margin: 6px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+button.ghost.danger { padding: 4px 10px; }
 
 /* 종목 화면: 바로 가기 칩 · 지표 한 줄 */
 .sec-chips { position: sticky; top: 52px; z-index: 5; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 6px 2px; background: var(--bg); }
