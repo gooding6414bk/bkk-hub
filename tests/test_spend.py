@@ -270,3 +270,14 @@ def test_kpass_card_wins_transit():
     s["cards"][0].update(month_used=600_000, month="2026-10")                                # 노리 교통 10% 조건(30만) 충족
     r = sp.recommend(s, "교통", 1_500, DAY)
     assert r["options"][0]["method"] == f"c:{s['cards'][1]['id']}"                            # K-패스 20% > 노리 10%
+
+
+def test_seoul_wide_voucher_works_in_every_gu():
+    s = state()
+    s["vouchers"] = [{"id": 1, "kind": "지역사랑", "name": "서울사랑", "balance": 100_000, "exp": "", "region": "서울", "rate": 5},
+                     {"id": 2, "kind": "지역사랑", "name": "강동", "balance": 50_000, "exp": "", "region": "강동구", "rate": 5},
+                     {"id": 3, "kind": "지역사랑", "name": "하머니", "balance": 50_000, "exp": "", "region": "하남", "rate": 8}]
+    got = lambda area: sorted(o["label"] for o in sp.recommend(s, "동네", 10_000, DAY, area=area)["options"] if "지역사랑" in o["label"])
+    assert got("강동구") == ["지역사랑상품권 (강동구)", "지역사랑상품권 (서울)"]
+    assert got("중구") == ["지역사랑상품권 (서울)"]
+    assert got("하남") == ["지역사랑상품권 (하남)"]

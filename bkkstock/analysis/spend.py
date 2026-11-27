@@ -551,11 +551,23 @@ def brand_words(state: dict) -> list[str]:
     return out
 
 
+SEOUL_GU = ("종로구", "중구", "용산구", "성동구", "광진구", "동대문구", "중랑구", "성북구", "강북구", "도봉구", "노원구", "은평구",
+            "서대문구", "마포구", "양천구", "강서구", "구로구", "금천구", "영등포구", "동작구", "관악구", "서초구", "강남구", "송파구", "강동구")
+
+
+def _region_ok(region: str, area: str) -> bool:
+    """상품권 지역이 이 가게 지역에서 쓰이나. 서울(광역)은 서울의 모든 구에서, 구 상품권은 그 구에서만."""
+    if not area or not region:
+        return True
+    if region in area or area in region:
+        return True
+    return region == "서울" and any(gu in area for gu in SEOUL_GU)
+
+
 def _live_vouchers(state, kind, today, area: str = ""):
-    """쓸 수 있는 상품권(만료 안 됨, 잔액 있음). 지역을 고르면 그 지역 상품권만(지역을 안 적은 상품권은 어디서나)."""
+    """쓸 수 있는 상품권(만료 안 됨, 잔액 있음). 지역을 고르면 그 지역에서 쓰이는 것만(지역을 안 적은 상품권은 어디서나)."""
     vs = [v for v in state["vouchers"] if v["kind"] == kind and v["balance"] > 0
-          and not (v.get("exp") and v["exp"] < today.isoformat())
-          and (not area or not v.get("region") or v["region"] in area or area in v["region"])]
+          and not (v.get("exp") and v["exp"] < today.isoformat()) and _region_ok(v.get("region", ""), area)]
     return sorted(vs, key=lambda v: v.get("exp") or "9999")          # 만료가 가까운 것부터 쓴다
 
 
