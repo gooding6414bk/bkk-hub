@@ -1,0 +1,8 @@
+# 공개되면 안 되는 것 — 저장소가 공개든 비공개든 git 에 올리지 않는다
+secrets/
+content/transcripts/
+source/private/
+# 다시 만들 수 있는 큰 파일
+*.mp4
+*.mp3
+*.wav
